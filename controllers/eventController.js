@@ -26,8 +26,14 @@ exports.getEventsByDate = (req, res) => {
 // ตรวจสอบสถานะการเข้าร่วมและสร้างคำขอใหม่หากจำเป็น
 // ผู้ใช้กดปุ่มยืนยันเข้าร่วมกิจกรรม
 exports.validateAndJoinEvent = (req, res) => {
-  const { date, startTime, location, user_id } = req.body;
+  let { date, startTime, location, user_id } = req.body;
   console.log("ตรวจสอบ:", { date, startTime, location });
+
+  // ปรับ startTime ถ้ามี format เกิน 3 ส่วน เช่น '09:30:00:00'
+  if (typeof startTime === "string" && startTime.split(":").length > 3) {
+    const parts = startTime.split(":");
+    startTime = parts.slice(0, 3).join(":"); // เอาแค่ HH:mm:ss
+  }
 
   const queryCheckEvent = `
     SELECT id_event
@@ -59,10 +65,10 @@ exports.validateAndJoinEvent = (req, res) => {
       const eventId = eventResults[0].id_event;
 
       const queryCheckStatus = `
-      SELECT status
-      FROM event_participants_join
-      WHERE event_id = ? AND users_id = ?
-    `;
+        SELECT status
+        FROM event_participants_join
+        WHERE event_id = ? AND users_id = ?
+      `;
 
       connection.query(
         queryCheckStatus,
@@ -87,9 +93,9 @@ exports.validateAndJoinEvent = (req, res) => {
           }
 
           const queryJoinEvent = `
-        INSERT INTO event_participants_join (event_id, users_id, status, created_at)
-        VALUES (?, ?, 'pending', NOW())
-      `;
+            INSERT INTO event_participants_join (event_id, users_id, status, created_at)
+            VALUES (?, ?, 'pending', NOW())
+          `;
 
           connection.query(queryJoinEvent, [eventId, user_id], (err) => {
             if (err) {
