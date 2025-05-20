@@ -92,9 +92,7 @@ exports.getUserProfile = (req, res) => {
       }
 
       const imageUrl = result[0].images_user
-        ? `${req.protocol}://${req.get("host")}/uploads/${
-            result[0].images_user
-          }`
+        ? `${process.env.DOMAIN_URL}/uploads/${result[0].images_user}`
         : null;
 
       res.json({
@@ -105,11 +103,51 @@ exports.getUserProfile = (req, res) => {
         sex: result[0].sex,
         rank_play: result[0].rank_play,
         status_login: result[0].status_login,
-        images_user: imageUrl,
+        images_user: imageUrl, // ส่ง path รูปเต็มออกไป
       });
     }
   );
 };
+
+// exports.getUserProfile = (req, res) => {
+//   const email_add = req.user.email_add;
+
+//   connection.query(
+//     `SELECT sname, email_add, phone, sex, rank_play, images_user, status_login 
+//      FROM users WHERE email_add = ?`,
+//     [email_add],
+//     (err, result) => {
+//       if (err) {
+//         return res
+//           .status(500)
+//           .json({ status: "error", message: "Database error", err });
+//       }
+
+//       if (result.length === 0) {
+//         return res
+//           .status(404)
+//           .json({ status: "error", message: "User not found" });
+//       }
+
+//       const imageUrl = result[0].images_user
+//         ? `${req.protocol}://${req.get("host")}/uploads/${
+//             result[0].images_user
+//           }`
+//         : null;
+
+//       res.json({
+//         status: "ok",
+//         sname: result[0].sname,
+//         email_add: result[0].email_add,
+//         phone: result[0].phone,
+//         sex: result[0].sex,
+//         rank_play: result[0].rank_play,
+//         status_login: result[0].status_login,
+//         images_user: imageUrl,
+//       });
+//     }
+//   );
+// };
 
 // อัพเดทข้อมูลโปรไฟล์ส่วนตัว ไม่รวมรูป
 exports.updateUserProfile = (req, res) => {
