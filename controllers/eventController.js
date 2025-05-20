@@ -207,7 +207,7 @@ exports.getApprovedUsersInEvent = (req, res) => {
     const users = results.map((user) => ({
       ...user,
       images_user: user.images_user
-        ? `${req.protocol}://${req.get("host")}/uploads/${user.images_user}`
+        ? `${process.env.DOMAIN_URL}/uploads/${user.images_user}`
         : null,
     }));
 
