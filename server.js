@@ -761,10 +761,14 @@ app.get("/api/get-group-display/:event_id", async (req, res) => {
       //  GROUP BY gd.court_number
       //  ORDER BY gd.id DESC`,
       `SELECT gd.group_id, gd.court_number
-   FROM game_details gd
-   WHERE gd.event_id = ? AND gd.is_finished = 0
-   GROUP BY gd.group_id, gd.court_number
-   ORDER BY gd.group_id DESC`,
+FROM game_details gd
+JOIN (
+    SELECT court_number, MAX(id) AS max_id
+    FROM game_details
+    WHERE event_id = ? AND is_finished = 0
+    GROUP BY court_number
+) latest ON gd.id = latest.max_id
+ORDER BY gd.id DESC`,
       [event_id]
     );
 
