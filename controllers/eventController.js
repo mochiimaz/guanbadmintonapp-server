@@ -26,6 +26,7 @@ exports.getEventsByDate = (req, res) => {
 // ตรวจสอบสถานะการเข้าร่วมและสร้างคำขอใหม่หากจำเป็น
 // ผู้ใช้กดปุ่มยืนยันเข้าร่วมกิจกรรม
 exports.validateAndJoinEvent = (req, res) => {
+  console.log("ตรวจสอบ:", { date, startTime, location });
   const { date, startTime, location, user_id } = req.body;
 
   const queryCheckEvent = `
@@ -38,6 +39,12 @@ exports.validateAndJoinEvent = (req, res) => {
     queryCheckEvent,
     [date, startTime, location],
     (err, eventResults) => {
+      console.log("Matching with:", { date, startTime, location });
+      console.log(
+        "SQL:",
+        connection.format(queryCheckEvent, [date, startTime, location])
+      );
+
       if (err) {
         console.error("Error checking event:", err);
         return res.status(500).json({ error: "Internal Server Error" });
