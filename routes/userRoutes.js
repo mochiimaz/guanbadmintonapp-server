@@ -6,6 +6,11 @@ const multer = require("multer");
 
 const upload = multer({ dest: "uploads/" });
 
+// router.get("/", (req, res) => {
+//   res.json({ message: "API /api/users ใช้งานได้" });
+// });
+
+
 // อัปเดตรูปโปรไฟล์ของผู้ใช้
 router.post(
   "/updateProfile/:userId",
