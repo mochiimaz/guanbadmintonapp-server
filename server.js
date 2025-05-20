@@ -755,11 +755,16 @@ app.get("/api/get-group-display/:event_id", async (req, res) => {
     );
 
     const [activeGames] = await connection.promise().execute(
+      // `SELECT gd.group_id, gd.court_number
+      //  FROM game_details gd
+      //  WHERE gd.event_id = ? AND gd.is_finished = 0
+      //  GROUP BY gd.court_number
+      //  ORDER BY gd.id DESC`,
       `SELECT gd.group_id, gd.court_number
-       FROM game_details gd
-       WHERE gd.event_id = ? AND gd.is_finished = 0
-       GROUP BY gd.court_number
-       ORDER BY gd.id DESC`,
+   FROM game_details gd
+   WHERE gd.event_id = ? AND gd.is_finished = 0
+   GROUP BY gd.group_id, gd.court_number
+   ORDER BY gd.group_id DESC`,
       [event_id]
     );
 

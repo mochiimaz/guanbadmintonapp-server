@@ -6,61 +6,61 @@ const { sendOtpEmail } = require("../utils/emailService");
 
 const secret = "login-api";
 
-exports.login = (req, res) => {
-  connection.execute(
-    "SELECT * FROM users WHERE email_add=?",
-    [req.body.email_add],
-    function (err, users) {
-      if (err) {
-        console.log("ผู้ใช้เข้าสู่ระบบ:", users[0]);
-        return res.status(500).json({ status: "error", message: err });
-      }
-      if (users.length === 0) {
-        return res.status(404).json({
-          status: "error",
-          message: "User not found",
-        });
-      }
+// exports.login = (req, res) => {
+//   connection.execute(
+//     "SELECT * FROM users WHERE email_add=?",
+//     [req.body.email_add],
+//     function (err, users) {
+//       if (err) {
+//         console.log("ผู้ใช้เข้าสู่ระบบ:", users[0]);
+//         return res.status(500).json({ status: "error", message: err });
+//       }
+//       if (users.length === 0) {
+//         return res.status(404).json({
+//           status: "error",
+//           message: "User not found",
+//         });
+//       }
 
-      bcrypt.compare(req.body.password, users[0].password, (err, isLogin) => {
-        if (err) {
-          return res.status(500).json({
-            status: "error",
-            message: "Server error",
-          });
-        }
+//       bcrypt.compare(req.body.password, users[0].password, (err, isLogin) => {
+//         if (err) {
+//           return res.status(500).json({
+//             status: "error",
+//             message: "Server error",
+//           });
+//         }
 
-        if (isLogin) {
-          // const token = jwt.sign({ email_add: users[0].email_add }, secret, {
-          //   expiresIn: "1h",
-          // });
-          const token = jwt.sign({ email_add: users[0].email_add }, secret);
+//         if (isLogin) {
+//           // const token = jwt.sign({ email_add: users[0].email_add }, secret, {
+//           //   expiresIn: "1h",
+//           // });
+//           const token = jwt.sign({ email_add: users[0].email_add }, secret);
 
-          //   Token out time
-          // const expirationTime = Math.floor(Date.now() / 1000) + 3600;
-          res.json({
-            status: "ok",
-            message: "Login success",
-            token,
-            // expirationTime,
-            id: users[0].id,
-            sname: users[0].sname,
-            email_add: users[0].email_add,
-            phone: users[0].phone,
-            sex: users[0].sex,
-            images_user: users[0].images_user,
-            status_login: users[0].status_login,
-          });
-        } else {
-          res.status(401).json({
-            status: "error",
-            message: "Login failed",
-          });
-        }
-      });
-    }
-  );
-};
+//           //   Token out time
+//           // const expirationTime = Math.floor(Date.now() / 1000) + 3600;
+//           res.json({
+//             status: "ok",
+//             message: "Login success",
+//             token,
+//             // expirationTime,
+//             id: users[0].id,
+//             sname: users[0].sname,
+//             email_add: users[0].email_add,
+//             phone: users[0].phone,
+//             sex: users[0].sex,
+//             images_user: users[0].images_user,
+//             status_login: users[0].status_login,
+//           });
+//         } else {
+//           res.status(401).json({
+//             status: "error",
+//             message: "Login failed",
+//           });
+//         }
+//       });
+//     }
+//   );
+// };
 
 // ตรวจสอบ Token ว่ามีอยู่ในระบบขณะนี้
 exports.authen = (req, res) => {
@@ -83,6 +83,46 @@ exports.authen = (req, res) => {
       message: err.message,
       action: "logout",
     });
+  }
+};
+
+exports.login = async (req, res) => {
+  const { email_add, password } = req.body;
+
+  try {
+    const [users] = await connection
+      .promise()
+      .execute("SELECT * FROM users WHERE email_add = ?", [email_add]);
+
+    if (!users || users.length === 0) {
+      return res.status(404).json({ message: "ไม่พบอีเมลนี้ในระบบ" });
+    }
+
+    const user = users[0];
+    const isLogin = await bcrypt.compare(password, user.password);
+    if (!isLogin) {
+      return res.status(401).json({ message: "รหัสผ่านไม่ถูกต้อง" });
+    }
+
+    const token = jwt.sign({ email_add: user.email_add }, secret);
+    // const expirationTime = Math.floor(Date.now() / 1000) + 7200;
+
+    res.json({
+      status: "ok",
+      message: "Login success",
+      token,
+      // expirationTime,
+      id: user.id,
+      sname: user.sname,
+      email_add: user.email_add,
+      phone: user.phone,
+      sex: user.sex,
+      images_user: user.images_user,
+      status_login: user.status_login,
+    });
+  } catch (error) {
+    console.error("Login error:", error.message);
+    res.status(500).json({ message: "เกิดข้อผิดพลาดในระบบ" });
   }
 };
 
