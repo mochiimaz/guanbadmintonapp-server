@@ -715,7 +715,7 @@ WHERE epj.event_id = ?
     JOIN game_details gd ON gm.group_id = gd.group_id
     WHERE gd.event_id = ? AND gd.is_finished = 0
   )`,
-      [event_id]
+      [event_id, event_id]
     );
 
     res.json({ success: true, players: rows });
