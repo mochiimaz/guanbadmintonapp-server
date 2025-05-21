@@ -403,7 +403,7 @@ app.post("/api/generate-court-match", async (req, res) => {
 1. ความชอบที่มีระดับใกล้เคียงกัน (1 น้อยมาก ถึง 5 ชอบมาก -> preference: 1-5, ค่า default คือ 3)
 2. ความสามารถที่ใกล้เคียงกัน (N, N/B, S, P, C/B/A)
 3. คอมเมนต์หากมี
-4. หลีกเลี่ยงกลุ่มเดิมหากไม่จำเป็น
+4. หลีกเลี่ยงไม่ให้ผู้เล่นเคยอยู่กลุ่มเดียวกันมาก่อน (ใช้ groupHistory ตรวจสอบ)
 
 - รูปแบบ JSON ต้องเป็น:
 [
@@ -413,7 +413,7 @@ app.post("/api/generate-court-match", async (req, res) => {
 ข้อมูลผู้เล่น:
 ${JSON.stringify(userMap, null, 2)}
 
-ประวัติกลุ่มก่อนหน้า:
+ประวัติกลุ่มเดิม (group_id ต่อ user_id):
 ${JSON.stringify(groupHistory, null, 2)}
 `;
 
