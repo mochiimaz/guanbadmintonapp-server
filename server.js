@@ -489,7 +489,7 @@ app.post("/api/generate-court-match", async (req, res) => {
     !event_id ||
     !court_number ||
     !Array.isArray(players) ||
-    players.length === 4
+    players.length !== 4
   ) {
     return res.status(400).json({
       success: false,
@@ -503,6 +503,11 @@ app.post("/api/generate-court-match", async (req, res) => {
     const [likesResult] = await connection
       .promise()
       .execute("SELECT * FROM user_likes");
+
+    const historyMap = await getPlayerGroupHistory(
+      event_id,
+      players.map((p) => p.id)
+    );
 
     // สร้าง userMap สำหรับ prompt
     const userMap = players.map((user) => {
@@ -529,7 +534,7 @@ app.post("/api/generate-court-match", async (req, res) => {
 1. ความชอบที่มีระดับใกล้เคียงกัน (1 น้อยมาก ถึง 5 ชอบมาก -> preference: 1-5, ค่า default คือ 3)
 2. ความสามารถที่ใกล้เคียงกัน (N, N/B, S, P, C/B/A)
 3. คอมเมนต์หากมี
-4. หลีกเลี่ยงกลุ่มเดิมหากไม่จำเป็น
+4. หลีกเลี่ยงกลุ่มเดิมหากไม่จำเป็น (ดูจาก history)
 
 - รูปแบบ JSON ต้องเป็น:
 [
@@ -1330,6 +1335,6 @@ app.post(
   }
 );
 
-app.get('/api/test', (req, res) => {
-  res.json({ message: 'Hello from API' });
+app.get("/api/test", (req, res) => {
+  res.json({ message: "Hello from API" });
 });
