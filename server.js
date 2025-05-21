@@ -80,19 +80,6 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
-// const storage = multer.diskStorage({
-//   destination: function (req, file, cb) {
-//     cb(null, "uploads/");
-//   },
-//   filename: function (req, file, cb) {
-//     const ext = path.extname(file.originalname); // ดึงนามสกุล เช่น .jpg
-//     const uniqueName = `${Date.now()}_${Math.round(Math.random() * 1e9)}${ext}`;
-//     cb(null, uniqueName);
-//   },
-// });
-
-// const upload = multer({ storage: storage });
-
 // ====================== Delete Event Time ======================
 function deleteExpiredEvents() {
   const expiredEventsQuery = `
@@ -354,132 +341,7 @@ async function saveMatchedGroups(event_id, groups) {
   }
 }
 
-// น่าจะเป็นการจับกลุ่มหมด จำไม่ได้ ปิดไว้ก่อนรอเทส
-// app.post("/api/generate-match-groups", async (req, res) => {
-//   const { event_id } = req.body;
-
-//   if (!event_id) {
-//     return res.status(400).json({ success: false, message: "ไม่พบ event_id" });
-//   }
-
-//   try {
-//     // เช็คว่าเกมที่เชื่อมโยงกับกลุ่มยังไม่เสร็จ
-//     const [unfinishedGames] = await connection
-//       .promise()
-//       .execute(
-//         `SELECT * FROM game_details WHERE event_id = ? AND is_finished = 0`,
-//         [event_id]
-//       );
-
-//     if (unfinishedGames.length > 0) {
-//       return res.json({
-//         success: false,
-//         message: "ยังมีเกมที่ยังไม่เสร็จ ไม่สามารถจับกลุ่มใหม่ได้",
-//       });
-//     }
-
-//     const players = await getPlayersForEvent(event_id);
-
-//     if (players.length < 4) {
-//       return res.json({
-//         success: false,
-//         message: "ผู้เล่นไม่เพียงพอในการจับกลุ่ม",
-//       });
-//     }
-
-//     const prompt = `คุณคือระบบ AI สำหรับจัดกลุ่มผู้เล่นแบดมินตัน โดยต้องจับกลุ่มละ 4 คน (รวมผู้ใช้งาน 1 คนอื่น 3 = 4)
-// - ให้ตอบกลับมาเฉพาะ JSON ที่จัดกลุ่มผู้เล่น
-// - ห้ามมีคำอธิบายใด ๆ เพิ่ม
-// - ห้ามขึ้นต้นด้วยข้อความ เช่น "แน่นอนครับ" หรือ "นี่คือตัวอย่าง"
-// - ห้ามใช้เครื่องหมาย \`\`\` ใด ๆ ทั้งสิ้น
-// - ตอบกลับเป็น JSON เท่านั้น โดยการจับคู่เงื่อนไขดังนี้
-// 1. ความชอบที่มีระดับใกล้เคียงกัน (1 น้อยมาก ถึง 5 ชอบมาก -> preference: 1-5, ค่า default คือ 3)
-// 2. ความสามารถที่ใกล้เตียงกัน (เรียงจากน้อยไปมาก -> skill: N, N/B, S, P, C/B/A)
-// 3. คอมเมนต์หากมี
-// 4. หลีกเลี่ยงกลุ่มเดิมหากไม่จำเป็น
-
-// ข้อมูลผู้เล่น:
-// ${JSON.stringify(players, null, 2)}
-
-// รูปแบบ JSON ที่ต้องการ:
-// [
-//   { "group": 1, "members": [ { "id": 1, "name": "..." }, ... ] },
-//   ...
-// ]`;
-
-//     // 🔁 เรียก GPT
-//     const openaiResponse = await axios.post(
-//       "https://api.openai.com/v1/chat/completions",
-//       {
-//         model: "gpt-4o",
-//         messages: [{ role: "user", content: prompt }],
-//         temperature: 0.7,
-//       },
-//       {
-//         headers: {
-//           "Content-Type": "application/json",
-//           Authorization: `Bearer ${OPENAI_API_KEY}`,
-//         },
-//       }
-//     );
-
-//     let text = openaiResponse.data.choices[0].message.content;
-
-//     // ✅ ล้าง markdown หรือเครื่องหมายที่ทำให้ JSON parse พัง
-//     text = text
-//       .replace(/```(?:json)?/g, "")
-//       .replace(/```/g, "")
-//       .trim();
-
-//     console.log("📥 Raw GPT Response:", text);
-
-//     let matchedGroups;
-//     try {
-//       matchedGroups = JSON.parse(text);
-
-//       // ✅ เผื่อ GPT ส่งกลับมาเป็น object { groups: [...] }
-//       if (!Array.isArray(matchedGroups) && matchedGroups.groups) {
-//         matchedGroups = matchedGroups.groups;
-//       }
-
-//       if (!Array.isArray(matchedGroups)) {
-//         throw new Error("ผลลัพธ์ GPT ไม่ใช่ array ของกลุ่ม");
-//       }
-//     } catch (jsonErr) {
-//       console.error("❌ JSON Parse Error:", jsonErr);
-//       return res.status(500).json({
-//         success: false,
-//         message: "ผลลัพธ์ไม่ใช่ JSON ที่คาดหวัง",
-//         raw: text,
-//       });
-//     }
-
-//     try {
-//       await saveMatchedGroups(event_id, matchedGroups);
-
-//       return res.json({
-//         success: true,
-//         message: "จัดกลุ่มสำเร็จ",
-//         groups: matchedGroups,
-//       });
-//     } catch (err) {
-//       console.error("❌ Save matched groups failed:", err);
-//       return res.status(500).json({
-//         success: false,
-//         message: "บันทึกข้อมูลกลุ่มล้มเหลว",
-//         error: err.message,
-//       });
-//     }
-//   } catch (err) {
-//     console.error("❌ Matching error:", err);
-//     return res.status(500).json({
-//       success: false,
-//       message: "จับกลุ่มล้มเหลว",
-//       error: err.message,
-//     });
-//   }
-// });
-
+// 
 // ============= ใช้สำหรับ "จับกลุ่มเกม" ต่อสนามใหม่ (เปลี่ยนกลุ่ม, เปลี่ยน group_id) =============
 // จับกลุ่มเกมเฉพาะสนามที่เลือก (เฉพาะ 4 คน) พร้อมตรวจสอบกลุ่มซ้ำ
 app.post("/api/generate-court-match", async (req, res) => {
@@ -489,38 +351,50 @@ app.post("/api/generate-court-match", async (req, res) => {
     !event_id ||
     !court_number ||
     !Array.isArray(players) ||
-    players.length < 4
+    players.length !== 4
   ) {
     return res.status(400).json({
       success: false,
       message:
-        "กรุณาส่ง event_id, court_number และ players อย่างถูกต้อง และต้องมีผู้เล่นอย่างน้อย 4 คน",
+        "กรุณาส่ง event_id, court_number และ players อย่างถูกต้อง โดยต้องมีผู้เล่นทั้งหมด 4 คนเท่านั้น",
     });
   }
 
   try {
-    // ดึง user_likes ทั้งหมด
-    const [likesResult] = await connection
-      .promise()
-      .execute("SELECT * FROM user_likes");
+    const allPlayerIds = players.map((p) => p.id);
 
-    // สร้าง userMap สำหรับ prompt
+    // ดึงจาก user_match_stats ทั้งหมด
+    const [statsResult] = await connection
+      .promise()
+      .execute("SELECT * FROM user_match_stats");
+
+    // เตรียม preference โดยเติม default 3 หากไม่มีข้อมูล
     const userMap = players.map((user) => {
-      const preferences = likesResult.filter((l) => l.user_id === user.id);
+      const rated = statsResult.filter((s) => s.liked_by_user_id === user.id);
+      const ratedMap = {};
+      rated.forEach((r) => {
+        ratedMap[r.user_id] = r.sum_rate;
+      });
+
+      const filledPrefs = allPlayerIds
+        .filter((targetId) => targetId !== user.id)
+        .map((targetId) => ({
+          target_id: targetId,
+          rating: ratedMap[targetId] || 3,
+          comment_user: null,
+        }));
+
       return {
         id: user.id,
         name: user.name,
         rank_play: user.rank_play,
-        preference_to: preferences.map((p) => ({
-          target_id: p.liked_user_id,
-          rating: p.rating,
-          comment_user: p.comment_user,
-        })),
+        preference_to: filledPrefs,
       };
     });
 
-    // ===== GPT PROMPT =====
-    const prompt = `คุณคือระบบ AI สำหรับจัดกลุ่มผู้เล่นแบดมินตัน โดยต้องจับกลุ่มละ 4 คน (รวมผู้ใช้งาน 1 คนอื่น 3 = 4)
+    const groupHistory = await getPlayerGroupHistory(event_id, allPlayerIds);
+
+    const prompt = `คุณคือระบบ AI สำหรับจัดกลุ่มผู้เล่นแบดมินตัน โดยต้องจับกลุ่มละ 4 คน เท่านั้น (ห้ามมากกว่าหรือน้อยกว่า)
 - ให้ตอบกลับมาเฉพาะ JSON ที่จัดกลุ่มผู้เล่น
 - ห้ามมีคำอธิบายใด ๆ เพิ่ม
 - ห้ามขึ้นต้นด้วยข้อความ เช่น \"แน่นอนครับ\" หรือ \"นี่คือตัวอย่าง\"
@@ -537,9 +411,12 @@ app.post("/api/generate-court-match", async (req, res) => {
 ]
 
 ข้อมูลผู้เล่น:
-${JSON.stringify(userMap, null, 2)}`;
+${JSON.stringify(userMap, null, 2)}
 
-    // เรียก GPT
+ประวัติกลุ่มก่อนหน้า:
+${JSON.stringify(groupHistory, null, 2)}
+`;
+
     const openaiResponse = await axios.post(
       "https://api.openai.com/v1/chat/completions",
       {
@@ -571,40 +448,37 @@ ${JSON.stringify(userMap, null, 2)}`;
       console.error("JSON Parse Error:", e);
       return res.status(500).json({
         success: false,
-        message: "รูปแบบผลลัพธ์ไม่ถูกต้อง",
+        message: "ผลลัพธ์ไม่เป็น JSON",
         raw: text,
       });
     }
 
-    // บันทึกกลุ่มใหม่
-    try {
-      const conn = connection.promise();
+    // ตรวจสอบให้ทุกกลุ่มมีสมาชิก 4 คนเท่านั้น
+    const allGroupsValid = matchedGroups.every(
+      (g) => Array.isArray(g.members) && g.members.length === 4
+    );
+    if (!allGroupsValid) {
+      return res.status(400).json({
+        success: false,
+        message: "การจัดกลุ่มล้มเหลว: ทุกกลุ่มต้องมีสมาชิก 4 คนเท่านั้น",
+      });
+    }
 
-      // 1. สร้าง group_matching
+    const conn = connection.promise();
+    for (const group of matchedGroups) {
       const [groupResult] = await conn.execute(
         "INSERT INTO group_matching (event_id) VALUES (?)",
         [event_id]
       );
       const group_id = groupResult.insertId;
 
-      // 2. เพิ่มสมาชิกลง group_members
-      const validUserIds = players.map((p) => p.id);
-      for (const member of matchedGroups[0].members) {
-        if (
-          !validUserIds.includes(member.id) ||
-          typeof member.id !== "number" ||
-          isNaN(member.id)
-        ) {
-          continue;
-        }
-
+      for (const member of group.members) {
         await conn.execute(
           "INSERT INTO group_members (group_id, user_id) VALUES (?, ?)",
           [group_id, member.id]
         );
       }
 
-      // 3. สร้าง game_details พร้อม court_number
       await conn.execute(
         `INSERT INTO game_details (
            event_id, group_id, court_number,
@@ -614,29 +488,23 @@ ${JSON.stringify(userMap, null, 2)}`;
          VALUES (?, ?, ?, NULL, NULL, NULL, 1, 0)`,
         [event_id, group_id, court_number]
       );
-
-      return res.json({
-        success: true,
-        message: "จับกลุ่มผู้เล่นในสนามสำเร็จ",
-        group: matchedGroups[0],
-      });
-    } catch (err) {
-      console.error("Save matched group failed:", err);
-      return res.status(500).json({
-        success: false,
-        message: "ไม่สามารถบันทึกข้อมูลกลุ่มได้",
-        error: err.message,
-      });
     }
+
+    return res.json({
+      success: true,
+      message: "จัดกลุ่มสำเร็จ",
+      groups: matchedGroups,
+    });
   } catch (error) {
     console.error("generate-court-match error:", error);
     return res.status(500).json({
       success: false,
-      message: "ไม่สามารถจับกลุ่มในสนามนี้ได้",
+      message: "ไม่สามารถจับกลุ่มได้",
       error: error.message,
     });
   }
 });
+
 // ===================================================================================
 app.post("/api/clear-court", async (req, res) => {
   const { event_id, court_number } = req.body;
@@ -965,42 +833,6 @@ app.get("/api/user-group/:event_id/:user_id", async (req, res) => {
   }
 });
 
-// เก็บผลการประเมินแต่ละรอบเกม ในอีเว้นต์วันนั้นๆ
-// app.post("/api/user/rate-round", async (req, res) => {
-//   const { event_id, group_id, user_id, ratings } = req.body;
-
-//   if (!event_id || !group_id || !user_id || !Array.isArray(ratings)) {
-//     return res.status(400).json({ success: false, message: "ข้อมูลไม่ครบ" });
-//   }
-
-//   const conn = connection.promise();
-
-//   try {
-//     for (const rating of ratings) {
-//       const { like_user, rate_com, comment_round } = rating;
-
-//       if (!like_user) continue; // ข้ามถ้าไม่มีผู้ถูกประเมิน
-
-//       await conn.execute(
-//         `INSERT INTO group_members_likes (event_id, group_id, user_id, like_user, rate_com, comment_round)
-//          VALUES (?, ?, ?, ?, ?, ?)`,
-//         [
-//           event_id,
-//           group_id,
-//           user_id,
-//           like_user,
-//           rate_com || null,
-//           comment_round || null,
-//         ]
-//       );
-//     }
-
-//     res.json({ success: true });
-//   } catch (err) {
-//     console.error("Insert round rating error:", err);
-//     res.status(500).json({ success: false, message: "บันทึกล้มเหลว" });
-//   }
-// });
 // อัปเดตคำนวณ Moving Average
 app.post("/api/user/rate-round", async (req, res) => {
   const { event_id, group_id, user_id, ratings } = req.body;
@@ -1151,26 +983,6 @@ app.post("/api/update-last-game", async (req, res) => {
     return res.status(500).json({ success: false, message: "Insert failed" });
   }
 });
-
-// สร้างรอบใหม่ รอระบุลูกขนไก่ จำนวน และสร้างรอบใหม่ไม่รีรหัสเกมถ้าไม่กดจับกลุ่มใหม่
-// app.post("/api/create-new-game", async (req, res) => {
-//   const { event_id } = req.body;
-//   try {
-//     await connection.promise().execute(
-//       `INSERT INTO game_details (event_id, group_id, court_number, game_sequence, is_finished)
-// SELECT ?, group_id, court_number, IFNULL(MAX(game_sequence), 0) + 1, 0
-// FROM game_details
-// WHERE event_id = ? AND court_number = ?
-// GROUP BY group_id`,
-//       [event_id, event_id]
-//     );
-//     res.json({ success: true });
-//   } catch (err) {
-//     console.error("Create New Game Error:", err);
-//     res.status(500).json({ success: false, message: "Insert failed" });
-//   }
-// });
-// ====================================================
 
 // ============= update เฉพาะ court_number ที่กดปุ่มเท่านั้น =============
 // อัพเดท is_finished = 1 ของเกมเก่าทั้งหมดใน event
@@ -1330,6 +1142,6 @@ app.post(
   }
 );
 
-app.get('/api/test', (req, res) => {
-  res.json({ message: 'Hello from API' });
+app.get("/api/test", (req, res) => {
+  res.json({ message: "Hello from API" });
 });
