@@ -345,23 +345,43 @@ async function saveMatchedGroups(event_id, groups) {
 // ============= ใช้สำหรับ "จับกลุ่มเกม" ต่อสนามใหม่ (เปลี่ยนกลุ่ม, เปลี่ยน group_id) =============
 // จับกลุ่มเกมเฉพาะสนามที่เลือก (เฉพาะ 4 คน) พร้อมตรวจสอบกลุ่มซ้ำ
 app.post("/api/generate-court-match", async (req, res) => {
-  const { event_id, court_number, players } = req.body;
+  const { event_id, court_number } = req.body;
 
-  if (
-    !event_id ||
-    !court_number ||
-    !Array.isArray(players) ||
-    players.length !== 4
-  ) {
+  if (!event_id || !court_number) {
     return res.status(400).json({
       success: false,
-      message:
-        "กรุณาส่ง event_id, court_number และ players อย่างถูกต้อง โดยต้องมีผู้เล่นทั้งหมด 4 คนเท่านั้น",
+      message: "กรุณาระบุ event_id และ court_number",
     });
   }
 
   try {
-    const allPlayerIds = players.map((p) => p.id);
+    // ดึงผู้เล่น approved + online ที่ยังไม่อยู่ในเกม
+    const [allPlayers] = await connection.promise().execute(
+      `
+      SELECT u.id, u.sname AS name, u.rank_play
+      FROM event_participants_join epj
+      JOIN users u ON epj.users_id = u.id
+      WHERE epj.event_id = ?
+        AND epj.status = 'approved'
+        AND epj.status_real_join = 'online'
+        AND u.id NOT IN (
+          SELECT gm.user_id
+          FROM group_members gm
+          JOIN game_details gd ON gm.group_id = gd.group_id
+          WHERE gd.event_id = ? AND gd.is_finished = 0
+        )
+      `,
+      [event_id, event_id]
+    );
+
+    if (allPlayers.length < 4) {
+      return res.status(400).json({
+        success: false,
+        message: "ต้องมีผู้เล่นอย่างน้อย 4 คนเพื่อจัดกลุ่ม",
+      });
+    }
+
+    const allPlayerIds = allPlayers.map((p) => p.id);
 
     // ดึงจาก user_match_stats ทั้งหมด
     const [statsResult] = await connection
@@ -369,7 +389,7 @@ app.post("/api/generate-court-match", async (req, res) => {
       .execute("SELECT * FROM user_match_stats");
 
     // เตรียม preference โดยเติม default 3 หากไม่มีข้อมูล
-    const userMap = players.map((user) => {
+    const userMap = allPlayers.map((user) => {
       const rated = statsResult.filter((s) => s.liked_by_user_id === user.id);
       const ratedMap = {};
       rated.forEach((r) => {
@@ -380,7 +400,7 @@ app.post("/api/generate-court-match", async (req, res) => {
         .filter((targetId) => targetId !== user.id)
         .map((targetId) => ({
           target_id: targetId,
-          rating: ratedMap[targetId] || 3,
+          rating: ratedMap[targetId] ?? 3,
           comment_user: null,
         }));
 
@@ -392,16 +412,19 @@ app.post("/api/generate-court-match", async (req, res) => {
       };
     });
 
-    const groupHistory = await getPlayerGroupHistory(event_id, allPlayerIds);
-
-    const prompt = `คุณคือระบบ AI สำหรับจัดกลุ่มผู้เล่นแบดมินตัน โดยต้องจับกลุ่มละ 4 คน เท่านั้น (ห้ามมากกว่าหรือน้อยกว่า)
+    const groupHistory = await getPlayerGroupHistory(
+      event_id,
+      allPlayers.map((p) => p.id)
+    );
+    
+    const prompt = `คุณคือระบบ AI สำหรับจัดกลุ่มผู้เล่นแบดมินตัน โดยต้องจับกลุ่มละ 4 คน เท่านั้น (ห้ามมากกว่าหรือน้อยกว่า ผู้ใช่งาน 1 คนอื่นๆอีก 3 รวม 4คนในกลุ่ม)
 - ให้ตอบกลับมาเฉพาะ JSON ที่จัดกลุ่มผู้เล่น
 - ห้ามมีคำอธิบายใด ๆ เพิ่ม
-- ห้ามขึ้นต้นด้วยข้อความ เช่น \"แน่นอนครับ\" หรือ \"นี่คือตัวอย่าง\"
+- ห้ามขึ้นต้นด้วยข้อความ เช่น "แน่นอนครับ" หรือ "นี่คือตัวอย่าง"
 - ห้ามใช้เครื่องหมาย \`\`\` ใด ๆ ทั้งสิ้น
 - ตอบกลับเป็น JSON เท่านั้น โดยการจับคู่เงื่อนไขดังนี้
 1. ความชอบที่มีระดับใกล้เคียงกัน (1 น้อยมาก ถึง 5 ชอบมาก -> preference: 1-5, ค่า default คือ 3)
-2. ความสามารถที่ใกล้เคียงกัน (N, N/B, S, P, C/B/A)
+2. ความสามารถที่ใกล้เคียงกัน (N/B, N, S, P, C/B/A)
 3. คอมเมนต์หากมี
 4. หลีกเลี่ยงไม่ให้ผู้เล่นเคยอยู่กลุ่มเดียวกันมาก่อน (ใช้ groupHistory ตรวจสอบ)
 
