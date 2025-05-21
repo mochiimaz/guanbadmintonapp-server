@@ -943,7 +943,7 @@ app.post("/api/update-last-game", async (req, res) => {
         [shuttlecock_cost, shuttlecock_count, totalCost, latest.id]
       );
 
-      // ✅ ✨ เพิ่มส่วนนี้: ดึงจำนวนสมาชิกในกลุ่ม แล้วคำนวณค่าเฉลี่ย
+      // ดึงจำนวนสมาชิกในกลุ่ม แล้วคำนวณค่าเฉลี่ย
       const [members] = await conn.execute(
         `SELECT COUNT(*) AS count FROM group_members WHERE group_id = ?`,
         [latest.group_id]
@@ -956,29 +956,9 @@ app.post("/api/update-last-game", async (req, res) => {
         latest.id,
       ]);
 
-      // เพิ่มรอบใหม่
-      const [nextRoundRows] = await conn.execute(
-        `SELECT IFNULL(MAX(game_sequence), 0) + 1 AS nextRound
-         FROM game_details
-         WHERE event_id = ? AND group_id = ?`,
-        [event_id, latest.group_id]
-      );
-
-      const nextRound = nextRoundRows[0].nextRound;
-
-      await conn.execute(
-        `INSERT INTO game_details (
-           event_id, group_id, court_number,
-           shuttlecock_cost, shuttlecock_count, total_cost,
-           game_sequence, is_finished
-         )
-         VALUES (?, ?, ?, NULL, NULL, NULL, ?, 0)`,
-        [event_id, latest.group_id, court_number, nextRound]
-      );
-
       return res.json({
         success: true,
-        message: `อัปเดตรอบแรกและสร้างรอบที่ ${nextRound} เรียบร้อยแล้ว`,
+        message: `อัปเดตรอบแรกเรียบร้อยแล้ว (ไม่มีการสร้างรอบใหม่)`,
       });
     }
 
