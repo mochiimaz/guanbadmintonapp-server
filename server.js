@@ -489,7 +489,7 @@ app.post("/api/generate-court-match", async (req, res) => {
     !event_id ||
     !court_number ||
     !Array.isArray(players) ||
-    players.length < 4
+    players.length === 4
   ) {
     return res.status(400).json({
       success: false,
