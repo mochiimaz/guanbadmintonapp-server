@@ -341,7 +341,7 @@ async function saveMatchedGroups(event_id, groups) {
   }
 }
 
-// 
+//
 // ============= ใช้สำหรับ "จับกลุ่มเกม" ต่อสนามใหม่ (เปลี่ยนกลุ่ม, เปลี่ยน group_id) =============
 // จับกลุ่มเกมเฉพาะสนามที่เลือก (เฉพาะ 4 คน) พร้อมตรวจสอบกลุ่มซ้ำ
 app.post("/api/generate-court-match", async (req, res) => {
@@ -704,9 +704,17 @@ app.get("/api/event/approved-online-players", async (req, res) => {
   try {
     const [rows] = await connection.promise().execute(
       `SELECT u.id, u.sname AS name, u.rank_play, u.sex, u.images_user
-       FROM event_participants_join epj
-       JOIN users u ON epj.users_id = u.id
-       WHERE epj.event_id = ? AND epj.status = 'approved' AND epj.status_real_join = 'online'`,
+FROM event_participants_join epj
+JOIN users u ON epj.users_id = u.id
+WHERE epj.event_id = ?
+  AND epj.status = 'approved'
+  AND epj.status_real_join = 'online'
+  AND u.id NOT IN (
+    SELECT gm.user_id
+    FROM group_members gm
+    JOIN game_details gd ON gm.group_id = gd.group_id
+    WHERE gd.event_id = ? AND gd.is_finished = 0
+  )`,
       [event_id]
     );
 
