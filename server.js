@@ -416,7 +416,7 @@ app.post("/api/generate-court-match", async (req, res) => {
       event_id,
       allPlayers.map((p) => p.id)
     );
-    
+
     const prompt = `คุณคือระบบ AI สำหรับจัดกลุ่มผู้เล่นแบดมินตัน โดยต้องจับกลุ่มละ 4 คน เท่านั้น (ห้ามมากกว่าหรือน้อยกว่า ผู้ใช่งาน 1 คนอื่นๆอีก 3 รวม 4คนในกลุ่ม)
 - ให้ตอบกลับมาเฉพาะ JSON ที่จัดกลุ่มผู้เล่น
 - ห้ามมีคำอธิบายใด ๆ เพิ่ม
@@ -476,18 +476,35 @@ ${JSON.stringify(groupHistory, null, 2)}
       });
     }
 
-    // ตรวจสอบให้ทุกกลุ่มมีสมาชิก 4 คนเท่านั้น
+    // ตรวจสอบว่า id ที่ได้มีอยู่จริงใน users
+    const allUserIds = matchedGroups.flatMap((g) => g.members.map((m) => m.id));
+    const [validUsers] = await connection
+      .promise()
+      .execute(
+        `SELECT id FROM users WHERE id IN (${allUserIds
+          .map(() => "?")
+          .join(",")})`,
+        allUserIds
+      );
+    const validUserIds = validUsers.map((u) => u.id);
+
+    // กรองเฉพาะสมาชิกที่มีใน users จริง
+    for (const group of matchedGroups) {
+      group.members = group.members.filter((m) => validUserIds.includes(m.id));
+    }
+
+    // ตรวจสอบให้ทุกกลุ่มมีสมาชิก 4 คนเท่านั้น (หลังกรองแล้ว)
     const allGroupsValid = matchedGroups.every(
       (g) => Array.isArray(g.members) && g.members.length === 4
     );
     if (!allGroupsValid) {
       return res.status(400).json({
         success: false,
-        message: "การจัดกลุ่มล้มเหลว: ทุกกลุ่มต้องมีสมาชิก 4 คนเท่านั้น",
+        message:
+          "การจัดกลุ่มล้มเหลว: สมาชิกบางคนไม่มีอยู่ในระบบ users หรือกลุ่มไม่ครบ 4 คน",
       });
     }
 
-    const conn = connection.promise();
     for (const group of matchedGroups) {
       const [groupResult] = await conn.execute(
         "INSERT INTO group_matching (event_id) VALUES (?)",
