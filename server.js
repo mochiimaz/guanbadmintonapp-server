@@ -209,50 +209,6 @@ const server = app.listen(3333, () => {
 
 // -----------------------LLM Matching Algorithm-----------------------
 
-// Helper: แปลง user_id เป็นชื่อ rank, คอมเมนต์, preference
-// async function getPlayersForEvent(event_id) {
-//   return new Promise((resolve, reject) => {
-//     connection.query(
-//       `SELECT u.id, u.sname AS name, u.rank_play
-//        FROM event_participants_join epj
-//        JOIN users u ON epj.users_id = u.id
-//        WHERE epj.event_id = ? AND epj.status = 'approved' AND epj.status_real_join = 'online'`,
-//       [event_id],
-//       (err, approvedResult) => {
-//         if (err) {
-//           console.error("❌ Query error:", err);
-//           return reject(err);
-//         }
-
-//         // ทำ query ที่สองในนี้ต่อได้เลย
-//         connection.query(`SELECT * FROM user_likes`, (err, likesResult) => {
-//           if (err) {
-//             console.error("❌ Likes query error:", err);
-//             return reject(err);
-//           }
-
-//           const userMap = approvedResult.map((user) => {
-//             const preferences = likesResult.filter(
-//               (l) => l.user_id === user.id
-//             );
-//             return {
-//               id: user.id,
-//               name: user.name,
-//               rank_play: user.rank_play,
-//               preference_to: preferences.map((p) => ({
-//                 target_id: p.liked_user_id,
-//                 rating: p.rating,
-//                 comment_user: p.comment_user,
-//               })),
-//             };
-//           });
-
-//           return resolve(userMap);
-//         });
-//       }
-//     );
-//   });
-// }
 // ปรับ getPlayersForEvent() ให้ดึงจาก user_match_stats แทน user_likes
 async function getPlayersForEvent(event_id) {
   return new Promise((resolve, reject) => {
@@ -343,7 +299,8 @@ async function saveMatchedGroups(event_id, groups) {
 
 //
 // ============= ใช้สำหรับ "จับกลุ่มเกม" ต่อสนามใหม่ (เปลี่ยนกลุ่ม, เปลี่ยน group_id) =============
-// จับกลุ่มเกมเฉพาะสนามที่เลือก (เฉพาะ 4 คน) พร้อมตรวจสอบกลุ่มซ้ำ
+
+// แก้ไขให้ LLM จัดกลุ่มเดียว (1 กลุ่ม 4 คนเท่านั้น) โดยเฉพาะสนามนั้น
 app.post("/api/generate-court-match", async (req, res) => {
   const { event_id, court_number } = req.body;
 
@@ -355,22 +312,19 @@ app.post("/api/generate-court-match", async (req, res) => {
   }
 
   try {
-    // ดึงผู้เล่น approved + online ที่ยังไม่อยู่ในเกม
     const [allPlayers] = await connection.promise().execute(
-      `
-      SELECT u.id, u.sname AS name, u.rank_play
-      FROM event_participants_join epj
-      JOIN users u ON epj.users_id = u.id
-      WHERE epj.event_id = ?
-        AND epj.status = 'approved'
-        AND epj.status_real_join = 'online'
-        AND u.id NOT IN (
-          SELECT gm.user_id
-          FROM group_members gm
-          JOIN game_details gd ON gm.group_id = gd.group_id
-          WHERE gd.event_id = ? AND gd.is_finished = 0
-        )
-      `,
+      `SELECT u.id, u.sname AS name, u.rank_play
+       FROM event_participants_join epj
+       JOIN users u ON epj.users_id = u.id
+       WHERE epj.event_id = ?
+         AND epj.status = 'approved'
+         AND epj.status_real_join = 'online'
+         AND u.id NOT IN (
+           SELECT gm.user_id
+           FROM group_members gm
+           JOIN game_details gd ON gm.group_id = gd.group_id
+           WHERE gd.event_id = ? AND gd.is_finished = 0
+         )`,
       [event_id, event_id]
     );
 
@@ -382,13 +336,10 @@ app.post("/api/generate-court-match", async (req, res) => {
     }
 
     const allPlayerIds = allPlayers.map((p) => p.id);
-
-    // ดึงจาก user_match_stats ทั้งหมด
     const [statsResult] = await connection
       .promise()
       .execute("SELECT * FROM user_match_stats");
 
-    // เตรียม preference โดยเติม default 3 หากไม่มีข้อมูล
     const userMap = allPlayers.map((user) => {
       const rated = statsResult.filter((s) => s.liked_by_user_id === user.id);
       const ratedMap = {};
@@ -417,7 +368,7 @@ app.post("/api/generate-court-match", async (req, res) => {
       allPlayers.map((p) => p.id)
     );
 
-    const prompt = `คุณคือระบบ AI สำหรับจัดกลุ่มผู้เล่นแบดมินตัน โดยต้องจับกลุ่มละ 4 คน เท่านั้น (ห้ามมากกว่าหรือน้อยกว่า ผู้ใช่งาน 1 คนอื่นๆอีก 3 รวม 4คนในกลุ่ม)
+    const prompt = `คุณคือระบบ AI สำหรับจัดกลุ่มผู้เล่นแบดมินตัน โดยต้องจับกลุ่มละ 4 คน เท่านั้น (ห้ามมากกว่าหรือน้อยกว่า 4 คน)
 - ให้ตอบกลับมาเฉพาะ JSON ที่จัดกลุ่มผู้เล่น
 - ห้ามมีคำอธิบายใด ๆ เพิ่ม
 - ห้ามขึ้นต้นด้วยข้อความ เช่น "แน่นอนครับ" หรือ "นี่คือตัวอย่าง"
@@ -428,19 +379,24 @@ app.post("/api/generate-court-match", async (req, res) => {
 3. คอมเมนต์หากมี
 4. หลีกเลี่ยงไม่ให้ผู้เล่นเคยอยู่กลุ่มเดียวกันมาก่อน (ใช้ groupHistory ตรวจสอบ)
 
-- รูปแบบ JSON ต้องเป็น:
-[
-  { "group": 1, "members": [ { "id": 1, "name": "..." }, ... ] }
-]
-
 ข้อมูลผู้เล่น:
 ${JSON.stringify(userMap, null, 2)}
 
-ห้ามจับผู้เล่นที่ไม่ได้อยู่ใน ID เหล่านี้:
-[${userMap.map((u) => u.id).join(",")}]
-
-ประวัติกลุ่มเดิม (group_id ต่อ user_id):
+ประวัติกลุ่มเดิม:
 ${JSON.stringify(groupHistory, null, 2)}
+
+ตัวอย่างผลลัพธ์:
+[
+  {
+    "group": 1,
+    "members": [
+      { "id": 1, "name": "..." },
+      { "id": 2, "name": "..." },
+      { "id": 3, "name": "..." },
+      { "id": 4, "name": "..." }
+    ]
+  }
+]
 `;
 
     const openaiResponse = await axios.post(
@@ -458,7 +414,7 @@ ${JSON.stringify(groupHistory, null, 2)}
       }
     );
 
-    let text = openaiResponse.data.choices[0].message.content;
+    let text = openaiResponse.data.choices[0].message.content.trim();
     text = text
       .replace(/```(?:json)?/g, "")
       .replace(/```/g, "")
@@ -467,12 +423,7 @@ ${JSON.stringify(groupHistory, null, 2)}
     let matchedGroups;
     try {
       matchedGroups = JSON.parse(text);
-      if (!Array.isArray(matchedGroups) && matchedGroups.group) {
-        matchedGroups = [matchedGroups];
-        console.log(matchedGroups);
-      }
     } catch (e) {
-      console.error("JSON Parse Error:", e);
       return res.status(500).json({
         success: false,
         message: "ผลลัพธ์ไม่เป็น JSON",
@@ -480,68 +431,46 @@ ${JSON.stringify(groupHistory, null, 2)}
       });
     }
 
-    const conn = connection.promise();
-
-    // ตรวจสอบว่า id ที่ได้มีอยู่จริงใน users
-    const allUserIds = matchedGroups.flatMap((g) => g.members.map((m) => m.id));
-    const [validUsers] = await connection
-      .promise()
-      .execute(
-        `SELECT id FROM users WHERE id IN (${allUserIds
-          .map(() => "?")
-          .join(",")})`,
-        allUserIds
-      );
-    const validUserIds = validUsers.map((u) => u.id);
-
-    // กรองเฉพาะสมาชิกที่มีใน users จริง
-    for (const group of matchedGroups) {
-      group.members = group.members.filter((m) => validUserIds.includes(m.id));
-    }
-
-    // ตรวจสอบให้ทุกกลุ่มมีสมาชิก 4 คนเท่านั้น (หลังกรองแล้ว)
-    const allGroupsValid = matchedGroups.every(
-      (g) => Array.isArray(g.members) && g.members.length === 4
-    );
-    if (!allGroupsValid) {
-      console.log("matchedGroups จาก LLM:", matchedGroups);
-      console.log("validUserIds:", validUserIds);
+    // กรองเฉพาะกลุ่มแรก และเช็คให้มี 4 คนจริง
+    const firstGroup = matchedGroups[0];
+    if (
+      !firstGroup ||
+      !Array.isArray(firstGroup.members) ||
+      firstGroup.members.length !== 4
+    ) {
       return res.status(400).json({
         success: false,
-        message:
-          "การจัดกลุ่มล้มเหลว: สมาชิกบางคนไม่มีอยู่ในระบบ users หรือกลุ่มไม่ครบ 4 คน",
+        message: "กลุ่มที่ตอบกลับไม่มีสมาชิกครบ 4 คน",
       });
     }
 
-    for (const group of matchedGroups) {
-      const [groupResult] = await conn.execute(
-        "INSERT INTO group_matching (event_id) VALUES (?)",
-        [event_id]
-      );
-      const group_id = groupResult.insertId;
+    const conn = connection.promise();
+    const [groupResult] = await conn.execute(
+      "INSERT INTO group_matching (event_id) VALUES (?)",
+      [event_id]
+    );
+    const group_id = groupResult.insertId;
 
-      for (const member of group.members) {
-        await conn.execute(
-          "INSERT INTO group_members (group_id, user_id) VALUES (?, ?)",
-          [group_id, member.id]
-        );
-      }
-
+    for (const member of firstGroup.members) {
       await conn.execute(
-        `INSERT INTO game_details (
-           event_id, group_id, court_number,
-           shuttlecock_cost, shuttlecock_count,
-           total_cost, game_sequence, is_finished
-         )
-         VALUES (?, ?, ?, NULL, NULL, NULL, 1, 0)`,
-        [event_id, group_id, court_number]
+        "INSERT INTO group_members (group_id, user_id) VALUES (?, ?)",
+        [group_id, member.id]
       );
     }
+
+    await conn.execute(
+      `INSERT INTO game_details (
+         event_id, group_id, court_number,
+         shuttlecock_cost, shuttlecock_count,
+         total_cost, game_sequence, is_finished
+       ) VALUES (?, ?, ?, NULL, NULL, NULL, 1, 0)`,
+      [event_id, group_id, court_number]
+    );
 
     return res.json({
       success: true,
       message: "จัดกลุ่มสำเร็จ",
-      groups: matchedGroups,
+      group: firstGroup,
     });
   } catch (error) {
     console.error("generate-court-match error:", error);
