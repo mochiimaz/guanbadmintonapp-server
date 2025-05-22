@@ -436,6 +436,9 @@ app.post("/api/generate-court-match", async (req, res) => {
 ข้อมูลผู้เล่น:
 ${JSON.stringify(userMap, null, 2)}
 
+ห้ามจับผู้เล่นที่ไม่ได้อยู่ใน ID เหล่านี้:
+[${userMap.map((u) => u.id).join(",")}]
+
 ประวัติกลุ่มเดิม (group_id ต่อ user_id):
 ${JSON.stringify(groupHistory, null, 2)}
 `;
@@ -466,6 +469,7 @@ ${JSON.stringify(groupHistory, null, 2)}
       matchedGroups = JSON.parse(text);
       if (!Array.isArray(matchedGroups) && matchedGroups.group) {
         matchedGroups = [matchedGroups];
+        console.log(matchedGroups);
       }
     } catch (e) {
       console.error("JSON Parse Error:", e);
@@ -475,7 +479,7 @@ ${JSON.stringify(groupHistory, null, 2)}
         raw: text,
       });
     }
-    
+
     const conn = connection.promise();
 
     // ตรวจสอบว่า id ที่ได้มีอยู่จริงใน users
@@ -500,6 +504,8 @@ ${JSON.stringify(groupHistory, null, 2)}
       (g) => Array.isArray(g.members) && g.members.length === 4
     );
     if (!allGroupsValid) {
+      console.log("matchedGroups จาก LLM:", matchedGroups);
+      console.log("validUserIds:", validUserIds);
       return res.status(400).json({
         success: false,
         message:
