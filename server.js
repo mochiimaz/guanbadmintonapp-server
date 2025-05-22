@@ -475,6 +475,8 @@ ${JSON.stringify(groupHistory, null, 2)}
         raw: text,
       });
     }
+    
+    const conn = connection.promise();
 
     // ตรวจสอบว่า id ที่ได้มีอยู่จริงใน users
     const allUserIds = matchedGroups.flatMap((g) => g.members.map((m) => m.id));
