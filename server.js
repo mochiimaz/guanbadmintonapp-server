@@ -376,8 +376,8 @@ app.post("/api/generate-court-match", async (req, res) => {
 - ตอบกลับเป็น JSON เท่านั้น โดยการจับคู่เงื่อนไขดังนี้
 1. ความชอบที่มีระดับใกล้เคียงกัน (1 น้อยมาก ถึง 5 ชอบมาก -> preference: 1-5, ค่า default คือ 3)
 2. ความสามารถที่ใกล้เคียงกัน (N/B, N, S, P, C/B/A)
-3. คอมเมนต์หากมี
-4. หลีกเลี่ยงไม่ให้ผู้เล่นเคยอยู่กลุ่มเดียวกันมาก่อน (ใช้ groupHistory ตรวจสอบ)
+3. ค่า Moving Average ที่ได้จากการเล่นร่วมกันก่อนหน้า (sum_rate) ให้พิจารณาจับกลุ่มคนที่ให้คะแนนกันในระดับที่ไม่ห่างกันมากเกินไป
+4. หลีกเลี่ยงไม่ให้ผู้เล่นเคยอยู่กลุ่มเดียวกันมาก่อน (ตรวจสอบจาก groupHistory ว่าเคยอยู่ใน group_id เดียวกันหรือไม่)
 
 ข้อมูลผู้เล่น:
 ${JSON.stringify(userMap, null, 2)}
@@ -396,8 +396,7 @@ ${JSON.stringify(groupHistory, null, 2)}
       { "id": 4, "name": "..." }
     ]
   }
-]
-`;
+]`;
 
     const openaiResponse = await axios.post(
       "https://api.openai.com/v1/chat/completions",
