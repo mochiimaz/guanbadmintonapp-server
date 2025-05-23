@@ -585,7 +585,7 @@ app.get("/api/court-players", async (req, res) => {
 });
 
 // ==========================================
-
+// ==========================================
 // สำหรับ Admin แสดงทุกกลุ่ม + event_status
 app.get("/api/get-group-display/:event_id", async (req, res) => {
   const { event_id } = req.params;
