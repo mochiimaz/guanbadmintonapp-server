@@ -1008,7 +1008,7 @@ app.patch("/api/admin/input-number-courts-event", async (req, res) => {
       message: "อัปเดตข้อมูลกิจกรรมเรียบร้อยแล้ว",
     });
   } catch (error) {
-    console.error("❌ Update event settings error:", error);
+    console.error("Update event settings error:", error);
     return res.status(500).json({
       success: false,
       message: "ไม่สามารถอัปเดตข้อมูลกิจกรรมได้",
