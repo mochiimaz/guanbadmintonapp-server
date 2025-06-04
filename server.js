@@ -1132,6 +1132,9 @@ app.get("/api/check-rating-status", async (req, res) => {
 // ตรวจสอบสเตตัสผู้เล่นได้ทำการประเมินหลังจบเกมหรือยัง กรณีปิด ข้าม
 app.post("/api/user/skip-rating", async (req, res) => {
   const { event_id, group_id, user_id } = req.body;
+  if (!event_id || !group_id || !user_id) {
+    return res.status(400).json({ success: false, message: "ข้อมูลไม่ครบ" });
+  }
   try {
     await connection.promise().execute(
       `INSERT INTO group_members_likes (event_id, group_id, user_id, status_com)
