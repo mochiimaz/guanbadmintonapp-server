@@ -617,6 +617,7 @@ ORDER BY gd.id DESC`,
         success: true,
         event_status: eventRows[0]?.event_status || "offline",
         number_courts: eventRows[0]?.number_courts || 0,
+        cost_shuttlecock: eventRows[0]?.cost_shuttlecock || 0,
         groups: [],
       });
     }
