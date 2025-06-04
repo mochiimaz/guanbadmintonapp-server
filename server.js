@@ -1137,10 +1137,12 @@ app.post("/api/user/skip-rating", async (req, res) => {
   }
   try {
     await connection.promise().execute(
-      `INSERT INTO group_members_likes (event_id, group_id, user_id, status_com)
-       VALUES (?, ?, ?, 2)`,
+      `INSERT INTO group_members_likes 
+   (event_id, group_id, user_id, like_user, rate_com, comment_round, status_com)
+   VALUES (?, ?, ?, NULL, NULL, NULL, 2)`,
       [event_id, group_id, user_id]
     );
+
     res.json({ success: true });
   } catch (err) {
     console.error("Skip rating error:", err);
