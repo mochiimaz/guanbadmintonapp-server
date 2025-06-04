@@ -836,16 +836,10 @@ app.post("/api/user/rate-round", async (req, res) => {
 
       // 1. บันทึกผลประเมินรายรอบ
       await conn.execute(
-        `INSERT INTO group_members_likes (event_id, group_id, user_id, like_user, rate_com, comment_round)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [
-          event_id,
-          group_id,
-          user_id,
-          like_user,
-          rate_com || null,
-          comment_round || null,
-        ]
+        `INSERT INTO group_members_likes
+   (event_id, group_id, user_id, like_user, rate_com, comment_round, status_com)
+   VALUES (?, ?, ?, ?, ?, ?, 1)`,
+        [event_id, group_id, user_id, like_user, rate_com, comment_round]
       );
 
       // 2. ดึงข้อมูลจาก user_match_stats เพื่อลง Moving Average
@@ -981,7 +975,13 @@ app.post("/api/finish-current-games", async (req, res) => {
 // แก้ไขการแสดงผลสนาม
 // PATCH: บันทึกสถานะกิจกรรม, ราคาค่าสนาม, จำนวนคอร์ด
 app.patch("/api/admin/input-number-courts-event", async (req, res) => {
-  const { event_id, event_status, cost_stadium, number_courts, cost_shuttlecock } = req.body;
+  const {
+    event_id,
+    event_status,
+    cost_stadium,
+    number_courts,
+    cost_shuttlecock,
+  } = req.body;
 
   if (!event_id || !event_status) {
     return res.status(400).json({
@@ -1108,6 +1108,65 @@ app.post(
     }
   }
 );
+
+// ตรวจสอบสเตตัสผู้เล่นได้ทำการประเมินหลังจบเกมหรือยัง บังคับ
+app.get("/api/check-rating-status", async (req, res) => {
+  const { event_id, group_id, user_id } = req.query;
+  try {
+    const [rows] = await connection.promise().execute(
+      `SELECT status_com
+       FROM group_members_likes
+       WHERE event_id = ? AND group_id = ? AND user_id = ?
+       ORDER BY id DESC LIMIT 1`,
+      [event_id, group_id, user_id]
+    );
+
+    const hasRated = rows.length > 0 && rows[0].status_com === 1;
+    res.json({ hasRated });
+  } catch (err) {
+    console.error("Check rating error:", err);
+    res.status(500).json({ hasRated: false });
+  }
+});
+
+// ตรวจสอบสเตตัสผู้เล่นได้ทำการประเมินหลังจบเกมหรือยัง กรณีปิด ข้าม
+app.post("/api/user/skip-rating", async (req, res) => {
+  const { event_id, group_id, user_id } = req.body;
+  try {
+    await connection.promise().execute(
+      `INSERT INTO group_members_likes (event_id, group_id, user_id, status_com)
+       VALUES (?, ?, ?, 2)`,
+      [event_id, group_id, user_id]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Skip rating error:", err);
+    res.status(500).json({ success: false, message: "บันทึกล้มเหลว" });
+  }
+});
+
+// ผู้ใช้สามารถรู้ได้ว่า status_com ของตัวเองคืออะไร (0, 1, 2)
+app.get("/api/check-group-rating-status", async (req, res) => {
+  const { event_id, group_id } = req.query;
+
+  if (!event_id || !group_id) {
+    return res.status(400).json({ success: false, message: "ข้อมูลไม่ครบ" });
+  }
+
+  try {
+    const [rows] = await connection.promise().execute(
+      `SELECT user_id, status_com
+       FROM group_members_likes
+       WHERE event_id = ? AND group_id = ?`,
+      [event_id, group_id]
+    );
+
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error("Check group rating status error:", err);
+    res.status(500).json({ success: false, message: "โหลดข้อมูลล้มเหลว" });
+  }
+});
 
 app.get("/api/test", (req, res) => {
   res.json({ message: "Hello from API" });
