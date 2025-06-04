@@ -591,7 +591,7 @@ app.get("/api/get-group-display/:event_id", async (req, res) => {
   const { event_id } = req.params;
   try {
     const [eventRows] = await connection.promise().execute(
-      `SELECT event_status, number_courts, cost_shuttlecock
+      `SELECT event_status, number_courts, shuttlecock_cost
        FROM events_admin
        WHERE id_event = ?
        LIMIT 1`,
@@ -599,7 +599,7 @@ app.get("/api/get-group-display/:event_id", async (req, res) => {
     );
 
     const [activeGames] = await connection.promise().execute(
-      `SELECT gd.group_id, gd.court_number, cost_shuttlecock
+      `SELECT gd.group_id, gd.court_number, gd.shuttlecock_cost
 FROM game_details gd
 JOIN (
     SELECT court_number, MAX(id) AS max_id
