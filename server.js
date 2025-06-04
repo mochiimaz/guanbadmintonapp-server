@@ -591,7 +591,7 @@ app.get("/api/get-group-display/:event_id", async (req, res) => {
   const { event_id } = req.params;
   try {
     const [eventRows] = await connection.promise().execute(
-      `SELECT event_status, number_courts, shuttlecock_cost
+      `SELECT event_status, number_courts, cost_shuttlecock
        FROM events_admin
        WHERE id_event = ?
        LIMIT 1`,
