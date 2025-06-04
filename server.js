@@ -591,7 +591,7 @@ app.get("/api/get-group-display/:event_id", async (req, res) => {
   const { event_id } = req.params;
   try {
     const [eventRows] = await connection.promise().execute(
-      `SELECT event_status, number_courts
+      `SELECT event_status, number_courts, cost_shuttlecock
        FROM events_admin
        WHERE id_event = ?
        LIMIT 1`,
@@ -599,7 +599,7 @@ app.get("/api/get-group-display/:event_id", async (req, res) => {
     );
 
     const [activeGames] = await connection.promise().execute(
-      `SELECT gd.group_id, gd.court_number
+      `SELECT gd.group_id, gd.court_number, cost_shuttlecock
 FROM game_details gd
 JOIN (
     SELECT court_number, MAX(id) AS max_id
@@ -655,6 +655,7 @@ ORDER BY gd.id DESC`,
       success: true,
       event_status: eventRows[0]?.event_status || "offline",
       number_courts: eventRows[0]?.number_courts || 0,
+      cost_shuttlecock: eventRows[0]?.cost_shuttlecock || 0,
       groups: formatted,
     });
   } catch (err) {
@@ -979,7 +980,7 @@ app.post("/api/finish-current-games", async (req, res) => {
 // แก้ไขการแสดงผลสนาม
 // PATCH: บันทึกสถานะกิจกรรม, ราคาค่าสนาม, จำนวนคอร์ด
 app.patch("/api/admin/input-number-courts-event", async (req, res) => {
-  const { event_id, event_status, cost_stadium, number_courts } = req.body;
+  const { event_id, event_status, cost_stadium, number_courts, cost_shuttlecock } = req.body;
 
   if (!event_id || !event_status) {
     return res.status(400).json({
@@ -991,12 +992,13 @@ app.patch("/api/admin/input-number-courts-event", async (req, res) => {
   try {
     const [result] = await connection.promise().execute(
       `UPDATE events_admin 
-         SET event_status = ?, cost_stadium = ?, number_courts = ? 
+         SET event_status = ?, cost_stadium = ?, number_courts = ?, cost_shuttlecock = ? 
          WHERE id_event = ?`,
       [
         event_status,
         cost_stadium !== undefined ? cost_stadium : null,
         number_courts !== undefined ? number_courts : null,
+        cost_shuttlecock !== undefined ? cost_shuttlecock : null,
         event_id,
       ]
     );
