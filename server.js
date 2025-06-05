@@ -815,17 +815,19 @@ app.get("/api/user-group/:event_id/:user_id", async (req, res) => {
       [groupId]
     );
 
+    // 4) ดึง is_finished และ game_sequence จาก game_details
     const [detailRows] = await connection.promise().execute(
       `SELECT is_finished, game_sequence
-   FROM game_details
-   WHERE event_id = ? AND group_id = ?
-   ORDER BY id DESC LIMIT 1`,
+       FROM game_details
+       WHERE event_id = ? AND group_id = ?
+       ORDER BY id DESC LIMIT 1`,
       [event_id, groupId]
     );
 
     const is_finished = detailRows[0]?.is_finished ?? 0;
     const game_sequence = detailRows[0]?.game_sequence ?? 1;
 
+    // 5) ส่งข้อมูลกลับให้ React
     return res.json({
       success: true,
       event_status: "online",
