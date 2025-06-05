@@ -466,6 +466,21 @@ ${JSON.stringify(groupHistory, null, 2)}
       [event_id, group_id, court_number]
     );
 
+    // สร้างการประเมิน group_members_likes สำหรับผู้เล่นในกลุ่มนี้
+    const members = firstGroup.members.map((m) => m.id);
+    for (const rater of members) {
+      const targets = members.filter((id) => id !== rater);
+      for (const target of targets) {
+        await conn.execute(
+          `INSERT INTO group_members_likes (
+         event_id, group_id, user_id, like_user,
+         rate_com, comment_round, status_com, created_at
+       ) VALUES (?, ?, ?, ?, NULL, NULL, 0, NOW())`,
+          [event_id, group_id, rater, target]
+        );
+      }
+    }
+
     return res.json({
       success: true,
       message: "จัดกลุ่มสำเร็จ",
@@ -916,10 +931,27 @@ app.post("/api/update-last-game", async (req, res) => {
       );
 
       // ดึงจำนวนสมาชิกในกลุ่ม แล้วคำนวณค่าเฉลี่ย
+      // ดึงสมาชิกในกลุ่มเพื่อสร้าง group_members_likes
       const [members] = await conn.execute(
-        `SELECT COUNT(*) AS count FROM group_members WHERE group_id = ?`,
+        `SELECT user_id FROM group_members WHERE group_id = ?`,
         [latest.group_id]
       );
+
+      // สร้างรายการประเมินสำหรับแต่ละผู้เล่น → ประเมินคนอื่น 3 คน
+      for (const member of members) {
+        const selfId = member.user_id;
+        for (const target of members) {
+          const otherId = target.user_id;
+          if (selfId !== otherId) {
+            await conn.execute(
+              `INSERT INTO group_members_likes
+         (event_id, group_id, user_id, like_user, rate_com, comment_round, status_com)
+         VALUES (?, ?, ?, ?, NULL, NULL, 0)`,
+              [event_id, latest.group_id, selfId, otherId]
+            );
+          }
+        }
+      }
       const memberCount = members[0].count || 1;
       const avg = totalCost / memberCount;
 
