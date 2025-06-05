@@ -827,7 +827,20 @@ app.get("/api/user-group/:event_id/:user_id", async (req, res) => {
     const is_finished = detailRows[0]?.is_finished ?? 0;
     const game_sequence = detailRows[0]?.game_sequence ?? 1;
 
-    // 5) ส่งข้อมูลกลับให้ React
+    // ตรวจสอบว่า user ประเมินรอบนี้หรือยัง
+    const [ratingStatusRows] = await connection.promise().execute(
+      `SELECT status_com FROM group_members_likes 
+   WHERE event_id = ? AND group_id = ? AND user_id = ?
+   ORDER BY id DESC LIMIT 1`,
+      [event_id, groupId, user_id]
+    );
+
+    const status_com = ratingStatusRows[0]?.status_com ?? 0;
+
+    // ถ้าเกมจบ และผู้ใช้ยังไม่ได้ประเมิน → ให้ React รู้ทันที
+    const is_just_finished = is_finished === 1 && status_com === 0;
+
+    // ส่งข้อมูลกลับ
     return res.json({
       success: true,
       event_status: "online",
@@ -835,6 +848,7 @@ app.get("/api/user-group/:event_id/:user_id", async (req, res) => {
         group_id: groupId,
         is_finished,
         game_sequence,
+        is_just_finished, // เพิ่ม property นี้
         members: membersRows,
       },
     });
