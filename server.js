@@ -952,13 +952,15 @@ app.post("/api/update-last-game", async (req, res) => {
           }
         }
       }
-      const memberCount = members[0].count || 1;
-      const avg = totalCost / memberCount;
+      const memberCount = members.length;
+      const avg = memberCount > 0 ? totalCost / memberCount : 0;
 
-      await conn.execute(`UPDATE game_details SET avr_total = ? WHERE id = ?`, [
-        avg,
-        latest.id,
-      ]);
+      await conn.execute(
+        `UPDATE game_details
+   SET shuttlecock_cost = ?, shuttlecock_count = ?, total_cost = ?, avr_total = ?
+   WHERE id = ?`,
+        [shuttlecock_cost, shuttlecock_count, totalCost, avg, latest.id]
+      );
 
       return res.json({
         success: true,
