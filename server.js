@@ -785,7 +785,7 @@ app.get("/api/user-group/:event_id/:user_id", async (req, res) => {
 
     // 2) หา group_id ล่าสุดของ user ที่ยังไม่จบเกม (is_finished = 0)
     const [groupResult] = await connection.promise().execute(
-      `SELECT gm.group_id
+      `SELECT gm.group_id, gd.is_finished
        FROM group_members gm
        JOIN group_matching gmch ON gm.group_id = gmch.group_id
        JOIN game_details gd ON gm.group_id = gd.group_id
@@ -850,6 +850,7 @@ app.get("/api/user-group/:event_id/:user_id", async (req, res) => {
         game_sequence,
         is_just_finished, // เพิ่ม property นี้
         members: membersRows,
+        is_finished: groupResult[0].is_finished,
       },
     });
   } catch (err) {
