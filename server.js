@@ -748,11 +748,8 @@ app.get("/api/get-court-from-group", async (req, res) => {
 // สำหรับ User ดูเฉพาะกลุ่มตัวเอง
 app.get("/api/user-group/:event_id/:user_id", async (req, res) => {
   const { event_id, user_id } = req.params;
-
   try {
     const conn = connection.promise();
-
-    // 1) ตรวจสอบสถานะ event
     const [eventRows] = await conn.execute(
       `SELECT event_status FROM events_admin WHERE id_event = ?`,
       [event_id]
@@ -766,19 +763,6 @@ app.get("/api/user-group/:event_id/:user_id", async (req, res) => {
       });
     }
 
-<<<<<<< HEAD
-    // 2) หา group_id ล่าสุดของ user ที่ยังไม่จบเกม (is_finished = 0)
-    const [groupResult] = await connection.promise().execute(
-      `SELECT gm.group_id, gd.is_finished, gd.show_rating_modal  -- **แก้ไขตรงนี้: เพิ่ม gd.show_rating_modal**
-FROM group_members gm
-JOIN group_matching gmch ON gm.group_id = gmch.group_id
-JOIN game_details gd ON gm.group_id = gd.group_id
-WHERE gm.user_id = ? AND gmch.event_id = ?
-ORDER BY gd.id DESC
-LIMIT 1
-`,
-=======
-    // 2) หากลุ่มที่กำลังเล่นอยู่ (activeGroup)
     const [activeGroupResult] = await conn.execute(
       `SELECT gm.group_id
        FROM group_members gm
@@ -786,7 +770,6 @@ LIMIT 1
        WHERE gm.user_id = ? AND gd.event_id = ? AND gd.is_finished = 0
        ORDER BY gd.id DESC
        LIMIT 1`,
->>>>>>> b3e407e (Update By Mochiimaz)
       [user_id, event_id]
     );
 
@@ -806,20 +789,6 @@ LIMIT 1
       };
     }
 
-<<<<<<< HEAD
-    const groupId = groupResult[0].group_id;
-    const showRatingModal = groupResult[0].show_rating_modal;
-
-    // 3) ดึงสมาชิกในกลุ่มนั้น
-    const [membersRows] = await connection.promise().execute(
-      `SELECT u.id AS user_id, u.sname AS name,
-           u.rank_play, u.sex, u.images_user
-   FROM group_members gm
-   JOIN users u ON gm.user_id = u.id
-   WHERE gm.group_id = ?`,
-      [groupId]
-=======
-    // 3) หากลุ่มล่าสุดที่เพิ่งจบไปเพื่อรอประเมิน (groupToRate)
     const [finishedGroupResult] = await conn.execute(
       `SELECT gm.group_id
        FROM group_members gm
@@ -828,7 +797,6 @@ LIMIT 1
        ORDER BY gd.id DESC
        LIMIT 1`,
       [user_id, event_id]
->>>>>>> b3e407e (Update By Mochiimaz)
     );
 
     let groupToRateData = null;
@@ -850,17 +818,8 @@ LIMIT 1
     return res.json({
       success: true,
       event_status: "online",
-<<<<<<< HEAD
-      group: {
-        group_id: groupId,
-        is_finished: groupResult[0].is_finished,
-        show_rating_modal: showRatingModal,
-        members: membersRows,
-      },
-=======
-      activeGroup: activeGroupData, // กลุ่มที่กำลังเล่น
-      groupToRate: groupToRateData, // กลุ่มที่ต้องประเมิน
->>>>>>> b3e407e (Update By Mochiimaz)
+      activeGroup: activeGroupData,
+      groupToRate: groupToRateData,
     });
   } catch (err) {
     console.error("Error fetching user status:", err);
@@ -871,7 +830,6 @@ LIMIT 1
     });
   }
 });
-
 // อัปเดตคำนวณ Moving Average
 app.post("/api/user/rate-round", async (req, res) => {
   const { event_id, group_id, user_id, ratings } = req.body;
