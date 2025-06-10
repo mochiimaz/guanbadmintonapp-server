@@ -770,13 +770,14 @@ app.get("/api/user-group/:event_id/:user_id", async (req, res) => {
 
     // 2) หา group_id ล่าสุดของ user ที่ยังไม่จบเกม (is_finished = 0)
     const [groupResult] = await connection.promise().execute(
-      `SELECT gm.group_id, gd.show_rating_modal
-   FROM group_members gm
-   JOIN group_matching gmch ON gm.group_id = gmch.group_id
-   JOIN game_details gd ON gm.group_id = gd.group_id
-   WHERE gm.user_id = ? AND gmch.event_id = ? AND gd.is_finished = 1
-   ORDER BY gd.id DESC
-   LIMIT 1`,
+      `SELECT gm.group_id, gd.is_finished
+FROM group_members gm
+JOIN group_matching gmch ON gm.group_id = gmch.group_id
+JOIN game_details gd ON gm.group_id = gd.group_id
+WHERE gm.user_id = ? AND gmch.event_id = ?
+ORDER BY gd.id DESC
+LIMIT 1
+`,
       [user_id, event_id]
     );
 
@@ -806,7 +807,7 @@ app.get("/api/user-group/:event_id/:user_id", async (req, res) => {
       event_status: "online",
       group: {
         group_id: groupId,
-        show_rating_modal: showRatingModal,
+        is_finished: latestGroup.is_finished,
         members: membersRows,
       },
     });
