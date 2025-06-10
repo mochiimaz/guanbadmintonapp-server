@@ -251,15 +251,18 @@ async function getPlayersForEvent(event_id) {
 }
 // สร้าง group + game detail
 async function saveMatchedGroups(event_id, groups) {
-  const conn = connection.promise();
+  const conn = connection.promise(); // 👈 เพิ่มบรรทัดนี้
 
   if (!Array.isArray(groups)) {
-    throw new Error("groups ที่ได้ไม่ใช่ array");
+    throw new Error("❌ groups ที่ได้ไม่ใช่ array");
   }
 
   for (const groupObj of groups) {
     if (!groupObj || !Array.isArray(groupObj.members)) {
-      console.error("groupObj.members ไม่ใช่ array หรือ undefined:", groupObj);
+      console.error(
+        "❌ groupObj.members ไม่ใช่ array หรือ undefined:",
+        groupObj
+      );
       continue;
     }
 
@@ -272,7 +275,7 @@ async function saveMatchedGroups(event_id, groups) {
       continue;
     }
 
-    // ใช้ promise แบบนี้แทน
+    // ✅ ใช้ promise แบบนี้แทน
     const [result] = await conn.execute(
       "INSERT INTO group_matching (event_id) VALUES (?)",
       [event_id]
@@ -748,12 +751,14 @@ app.get("/api/get-court-from-group", async (req, res) => {
 // สำหรับ User ดูเฉพาะกลุ่มตัวเอง
 app.get("/api/user-group/:event_id/:user_id", async (req, res) => {
   const { event_id, user_id } = req.params;
+
   try {
-    const conn = connection.promise();
-    const [eventRows] = await conn.execute(
-      `SELECT event_status FROM events_admin WHERE id_event = ?`,
-      [event_id]
-    );
+    // 1) ตรวจสอบสถานะ event
+    const [eventRows] = await connection
+      .promise()
+      .execute(`SELECT event_status FROM events_admin WHERE id_event = ?`, [
+        event_id,
+      ]);
 
     if (eventRows.length === 0 || eventRows[0].event_status !== "online") {
       return res.json({
@@ -763,73 +768,57 @@ app.get("/api/user-group/:event_id/:user_id", async (req, res) => {
       });
     }
 
-    const [activeGroupResult] = await conn.execute(
+    // 2) หา group_id ล่าสุดของ user ที่ยังไม่จบเกม (is_finished = 0)
+    const [groupResult] = await connection.promise().execute(
       `SELECT gm.group_id
        FROM group_members gm
+       JOIN group_matching gmch ON gm.group_id = gmch.group_id
        JOIN game_details gd ON gm.group_id = gd.group_id
-       WHERE gm.user_id = ? AND gd.event_id = ? AND gd.is_finished = 0
+       WHERE gm.user_id = ? AND gmch.event_id = ? AND gd.is_finished = 0
        ORDER BY gd.id DESC
        LIMIT 1`,
       [user_id, event_id]
     );
 
-    let activeGroupData = null;
-    if (activeGroupResult.length > 0) {
-      const groupId = activeGroupResult[0].group_id;
-      const [membersRows] = await conn.execute(
-        `SELECT u.id AS user_id, u.sname AS name, u.rank_play, u.sex, u.images_user
-         FROM group_members gm
-         JOIN users u ON gm.user_id = u.id
-         WHERE gm.group_id = ?`,
-        [groupId]
-      );
-      activeGroupData = {
-        group_id: groupId,
-        members: membersRows,
-      };
+    if (groupResult.length === 0) {
+      return res.json({
+        success: false,
+        message: "ไม่พบกลุ่มที่กำลังเล่นอยู่ของผู้ใช้ในกิจกรรมนี้",
+        event_status: "online",
+      });
     }
 
-    const [finishedGroupResult] = await conn.execute(
-      `SELECT gm.group_id
+    const groupId = groupResult[0].group_id;
+
+    // 3) ดึงสมาชิกในกลุ่มนั้น
+    const [membersRows] = await connection.promise().execute(
+      `SELECT u.id AS user_id, u.sname AS name,
+              u.rank_play, u.sex, u.images_user
        FROM group_members gm
-       JOIN game_details gd ON gm.group_id = gd.group_id
-       WHERE gm.user_id = ? AND gd.event_id = ? AND gd.is_finished = 1
-       ORDER BY gd.id DESC
-       LIMIT 1`,
-      [user_id, event_id]
+       JOIN users u ON gm.user_id = u.id
+       WHERE gm.group_id = ?`,
+      [groupId]
     );
-
-    let groupToRateData = null;
-    if (finishedGroupResult.length > 0) {
-      const groupId = finishedGroupResult[0].group_id;
-      const [membersRows] = await conn.execute(
-        `SELECT u.id AS user_id, u.sname AS name, u.rank_play, u.sex, u.images_user
-         FROM group_members gm
-         JOIN users u ON gm.user_id = u.id
-         WHERE gm.group_id = ?`,
-        [groupId]
-      );
-      groupToRateData = {
-        group_id: groupId,
-        members: membersRows,
-      };
-    }
 
     return res.json({
       success: true,
       event_status: "online",
-      activeGroup: activeGroupData,
-      groupToRate: groupToRateData,
+      group: {
+        group_id: groupId,
+        members: membersRows,
+      },
     });
   } catch (err) {
-    console.error("Error fetching user status:", err);
+    console.error("Error fetching group data:", err);
     return res.status(500).json({
       success: false,
       message: "เกิดข้อผิดพลาดในการดึงข้อมูล",
       error: err.message,
+      event_status: "offline",
     });
   }
 });
+
 // อัปเดตคำนวณ Moving Average
 app.post("/api/user/rate-round", async (req, res) => {
   const { event_id, group_id, user_id, ratings } = req.body;
@@ -992,13 +981,7 @@ app.post("/api/finish-current-games", async (req, res) => {
 // แก้ไขการแสดงผลสนาม
 // PATCH: บันทึกสถานะกิจกรรม, ราคาค่าสนาม, จำนวนคอร์ด
 app.patch("/api/admin/input-number-courts-event", async (req, res) => {
-  const {
-    event_id,
-    event_status,
-    cost_stadium,
-    number_courts,
-    cost_shuttlecock,
-  } = req.body;
+  const { event_id, event_status, cost_stadium, number_courts, cost_shuttlecock } = req.body;
 
   if (!event_id || !event_status) {
     return res.status(400).json({
