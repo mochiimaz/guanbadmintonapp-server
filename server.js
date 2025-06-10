@@ -766,10 +766,11 @@ app.get("/api/user-group/:event_id/:user_id", async (req, res) => {
         message: "ห้องกิจกรรมยังไม่ได้เปิดใช้งาน",
         event_status: "offline",
       });
-    } // 2) หา group_id ล่าสุดของ user ที่ยังไม่จบเกม (is_finished = 0)
+    }
 
+    // 2) หา group_id ล่าสุดของ user ที่ยังไม่จบเกม (is_finished = 0)
     const [groupResult] = await connection.promise().execute(
-      `SELECT gm.group_id, gd.is_finished
+      `SELECT gm.group_id, gd.is_finished, gd.show_rating_modal  -- **แก้ไขตรงนี้: เพิ่ม gd.show_rating_modal**
 FROM group_members gm
 JOIN group_matching gmch ON gm.group_id = gmch.group_id
 JOIN game_details gd ON gm.group_id = gd.group_id
@@ -791,12 +792,13 @@ LIMIT 1
     const groupId = groupResult[0].group_id;
     const showRatingModal = groupResult[0].show_rating_modal;
 
+    // 3) ดึงสมาชิกในกลุ่มนั้น
     const [membersRows] = await connection.promise().execute(
       `SELECT u.id AS user_id, u.sname AS name,
-          u.rank_play, u.sex, u.images_user
-   FROM group_members gm
-   JOIN users u ON gm.user_id = u.id
-   WHERE gm.group_id = ?`,
+           u.rank_play, u.sex, u.images_user
+   FROM group_members gm
+   JOIN users u ON gm.user_id = u.id
+   WHERE gm.group_id = ?`,
       [groupId]
     );
 
@@ -806,6 +808,7 @@ LIMIT 1
       group: {
         group_id: groupId,
         is_finished: groupResult[0].is_finished,
+        show_rating_modal: showRatingModal,
         members: membersRows,
       },
     });
@@ -819,6 +822,7 @@ LIMIT 1
     });
   }
 });
+
 // อัปเดตคำนวณ Moving Average
 app.post("/api/user/rate-round", async (req, res) => {
   const { event_id, group_id, user_id, ratings } = req.body;
