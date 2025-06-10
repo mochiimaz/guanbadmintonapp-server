@@ -753,68 +753,89 @@ app.get("/api/user-group/:event_id/:user_id", async (req, res) => {
   const { event_id, user_id } = req.params;
 
   try {
+    const conn = connection.promise();
+
     // 1) ตรวจสอบสถานะ event
-    const [eventRows] = await connection
-      .promise()
-      .execute(`SELECT event_status FROM events_admin WHERE id_event = ?`, [
-        event_id,
-      ]);
+    const [eventRows] = await conn.execute(
+      `SELECT event_status FROM events_admin WHERE id_event = ?`,
+      [event_id]
+    );
 
     if (eventRows.length === 0 || eventRows[0].event_status !== "online") {
       return res.json({
-        success: false,
-        message: "ห้องกิจกรรมยังไม่ได้เปิดใช้งาน",
+        success: true,
         event_status: "offline",
+        activeGroup: null,
+        groupToRate: null,
       });
     }
 
-    // 2) หา group_id ล่าสุดของ user ที่ยังไม่จบเกม (is_finished = 0)
-    const [groupResult] = await connection.promise().execute(
+    // 2) หากลุ่มที่กำลังเล่นอยู่ (activeGroup)
+    const [activeGroupResult] = await conn.execute(
       `SELECT gm.group_id
        FROM group_members gm
-       JOIN group_matching gmch ON gm.group_id = gmch.group_id
        JOIN game_details gd ON gm.group_id = gd.group_id
-       WHERE gm.user_id = ? AND gmch.event_id = ? AND gd.is_finished = 0
+       WHERE gm.user_id = ? AND gd.event_id = ? AND gd.is_finished = 0
        ORDER BY gd.id DESC
        LIMIT 1`,
       [user_id, event_id]
     );
 
-    if (groupResult.length === 0) {
-      return res.json({
-        success: false,
-        message: "ไม่พบกลุ่มที่กำลังเล่นอยู่ของผู้ใช้ในกิจกรรมนี้",
-        event_status: "online",
-      });
+    let activeGroupData = null;
+    if (activeGroupResult.length > 0) {
+      const groupId = activeGroupResult[0].group_id;
+      const [membersRows] = await conn.execute(
+        `SELECT u.id AS user_id, u.sname AS name, u.rank_play, u.sex, u.images_user
+         FROM group_members gm
+         JOIN users u ON gm.user_id = u.id
+         WHERE gm.group_id = ?`,
+        [groupId]
+      );
+      activeGroupData = {
+        group_id: groupId,
+        members: membersRows,
+      };
     }
 
-    const groupId = groupResult[0].group_id;
-
-    // 3) ดึงสมาชิกในกลุ่มนั้น
-    const [membersRows] = await connection.promise().execute(
-      `SELECT u.id AS user_id, u.sname AS name,
-              u.rank_play, u.sex, u.images_user
+    // 3) หากลุ่มล่าสุดที่เพิ่งจบไปเพื่อรอประเมิน (groupToRate)
+    const [finishedGroupResult] = await conn.execute(
+      `SELECT gm.group_id
        FROM group_members gm
-       JOIN users u ON gm.user_id = u.id
-       WHERE gm.group_id = ?`,
-      [groupId]
+       JOIN game_details gd ON gm.group_id = gd.group_id
+       WHERE gm.user_id = ? AND gd.event_id = ? AND gd.is_finished = 1
+       ORDER BY gd.id DESC
+       LIMIT 1`,
+      [user_id, event_id]
     );
+
+    let groupToRateData = null;
+    if (finishedGroupResult.length > 0) {
+      const groupId = finishedGroupResult[0].group_id;
+      const [membersRows] = await conn.execute(
+        `SELECT u.id AS user_id, u.sname AS name, u.rank_play, u.sex, u.images_user
+         FROM group_members gm
+         JOIN users u ON gm.user_id = u.id
+         WHERE gm.group_id = ?`,
+        [groupId]
+      );
+      groupToRateData = {
+        group_id: groupId,
+        members: membersRows,
+      };
+    }
 
     return res.json({
       success: true,
       event_status: "online",
-      group: {
-        group_id: groupId,
-        members: membersRows,
-      },
+      activeGroup: activeGroupData,
+      groupToRate: groupToRateData,
     });
   } catch (err) {
-    console.error("Error fetching group data:", err);
+    console.error("Error fetching user status:", err);
     return res.status(500).json({
       success: false,
       message: "เกิดข้อผิดพลาดในการดึงข้อมูล",
       error: err.message,
-      event_status: "offline",
     });
   }
 });
@@ -981,7 +1002,13 @@ app.post("/api/finish-current-games", async (req, res) => {
 // แก้ไขการแสดงผลสนาม
 // PATCH: บันทึกสถานะกิจกรรม, ราคาค่าสนาม, จำนวนคอร์ด
 app.patch("/api/admin/input-number-courts-event", async (req, res) => {
-  const { event_id, event_status, cost_stadium, number_courts, cost_shuttlecock } = req.body;
+  const {
+    event_id,
+    event_status,
+    cost_stadium,
+    number_courts,
+    cost_shuttlecock,
+  } = req.body;
 
   if (!event_id || !event_status) {
     return res.status(400).json({
