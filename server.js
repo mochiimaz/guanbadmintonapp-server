@@ -768,27 +768,27 @@ app.get("/api/user-group/:event_id/:user_id", async (req, res) => {
       });
     }
 
-    // 2) หา group_id ล่าสุดของ user ที่ยังไม่จบเกม (is_finished = 0)
+    // 2) หา group_id ล่าสุดของ user ที่จบรอบแล้วและยังมี show_rating_modal = 1
     const [groupResult] = await connection.promise().execute(
-      `SELECT gm.group_id
+      `SELECT gd.group_id, gd.show_rating_modal
        FROM group_members gm
-       JOIN group_matching gmch ON gm.group_id = gmch.group_id
        JOIN game_details gd ON gm.group_id = gd.group_id
-       WHERE gm.user_id = ? AND gmch.event_id = ? AND gd.is_finished = 0
-       ORDER BY gd.id DESC
-       LIMIT 1`,
+       WHERE gm.user_id = ? AND gd.event_id = ? 
+         AND gd.is_finished = 1 AND gd.show_rating_modal = 1
+       ORDER BY gd.id DESC LIMIT 1`,
       [user_id, event_id]
     );
 
     if (groupResult.length === 0) {
       return res.json({
         success: false,
-        message: "ไม่พบกลุ่มที่กำลังเล่นอยู่ของผู้ใช้ในกิจกรรมนี้",
+        message: "ไม่พบกลุ่มที่ต้องประเมิน หรือคุณได้ประเมินไปแล้ว",
         event_status: "online",
       });
     }
 
     const groupId = groupResult[0].group_id;
+    const showRatingModal = groupResult[0].show_rating_modal;
 
     // 3) ดึงสมาชิกในกลุ่มนั้น
     const [membersRows] = await connection.promise().execute(
@@ -805,6 +805,7 @@ app.get("/api/user-group/:event_id/:user_id", async (req, res) => {
       event_status: "online",
       group: {
         group_id: groupId,
+        show_rating_modal: showRatingModal,
         members: membersRows,
       },
     });
@@ -913,10 +914,11 @@ app.post("/api/update-last-game", async (req, res) => {
     const latest = latestRows[0];
 
     if (latest.shuttlecock_cost == null || latest.shuttlecock_count == null) {
-      // อัปเดตรอบแรก
+      // อัปเดตรอบแรก + เปิด modal ให้ user ประเมิน
       await conn.execute(
         `UPDATE game_details
-         SET shuttlecock_cost = ?, shuttlecock_count = ?, total_cost = ?
+         SET shuttlecock_cost = ?, shuttlecock_count = ?, total_cost = ?,
+             is_finished = 1, show_rating_modal = 1
          WHERE id = ?`,
         [shuttlecock_cost, shuttlecock_count, totalCost, latest.id]
       );
@@ -936,7 +938,7 @@ app.post("/api/update-last-game", async (req, res) => {
 
       return res.json({
         success: true,
-        message: `อัปเดตรอบแรกเรียบร้อยแล้ว (ไม่มีการสร้างรอบใหม่)`,
+        message: `อัปเดตรอบแรกเรียบร้อยแล้ว (พร้อมเปิด modal ประเมิน)`,
       });
     }
 
@@ -981,7 +983,13 @@ app.post("/api/finish-current-games", async (req, res) => {
 // แก้ไขการแสดงผลสนาม
 // PATCH: บันทึกสถานะกิจกรรม, ราคาค่าสนาม, จำนวนคอร์ด
 app.patch("/api/admin/input-number-courts-event", async (req, res) => {
-  const { event_id, event_status, cost_stadium, number_courts, cost_shuttlecock } = req.body;
+  const {
+    event_id,
+    event_status,
+    cost_stadium,
+    number_courts,
+    cost_shuttlecock,
+  } = req.body;
 
   if (!event_id || !event_status) {
     return res.status(400).json({
@@ -1108,6 +1116,19 @@ app.post(
     }
   }
 );
+
+app.post("/api/clear-rating-modal", async (req, res) => {
+  const { event_id, group_id } = req.body;
+
+  await db.query(
+    `UPDATE game_details
+     SET show_rating_modal = 0
+     WHERE event_id = ? AND group_id = ?`,
+    [event_id, group_id]
+  );
+
+  res.json({ success: true });
+});
 
 app.get("/api/test", (req, res) => {
   res.json({ message: "Hello from API" });
