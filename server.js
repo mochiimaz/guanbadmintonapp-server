@@ -770,13 +770,13 @@ app.get("/api/user-group/:event_id/:user_id", async (req, res) => {
 
     // 2) หา group_id ล่าสุดของ user ที่ยังไม่จบเกม (is_finished = 0)
     const [groupResult] = await connection.promise().execute(
-      `SELECT gm.group_id
-       FROM group_members gm
-       JOIN group_matching gmch ON gm.group_id = gmch.group_id
-       JOIN game_details gd ON gm.group_id = gd.group_id
-       WHERE gm.user_id = ? AND gmch.event_id = ? AND gd.is_finished = 0
-       ORDER BY gd.id DESC
-       LIMIT 1`,
+      `SELECT gm.group_id, gd.show_rating_modal
+   FROM group_members gm
+   JOIN group_matching gmch ON gm.group_id = gmch.group_id
+   JOIN game_details gd ON gm.group_id = gd.group_id
+   WHERE gm.user_id = ? AND gmch.event_id = ? AND gd.is_finished = 1
+   ORDER BY gd.id DESC
+   LIMIT 1`,
       [user_id, event_id]
     );
 
@@ -789,14 +789,15 @@ app.get("/api/user-group/:event_id/:user_id", async (req, res) => {
     }
 
     const groupId = groupResult[0].group_id;
+    const showRatingModal = groupResult[0].show_rating_modal;
 
     // 3) ดึงสมาชิกในกลุ่มนั้น
     const [membersRows] = await connection.promise().execute(
       `SELECT u.id AS user_id, u.sname AS name,
-              u.rank_play, u.sex, u.images_user
-       FROM group_members gm
-       JOIN users u ON gm.user_id = u.id
-       WHERE gm.group_id = ?`,
+          u.rank_play, u.sex, u.images_user
+   FROM group_members gm
+   JOIN users u ON gm.user_id = u.id
+   WHERE gm.group_id = ?`,
       [groupId]
     );
 
@@ -805,6 +806,7 @@ app.get("/api/user-group/:event_id/:user_id", async (req, res) => {
       event_status: "online",
       group: {
         group_id: groupId,
+        show_rating_modal: showRatingModal,
         members: membersRows,
       },
     });
@@ -981,7 +983,13 @@ app.post("/api/finish-current-games", async (req, res) => {
 // แก้ไขการแสดงผลสนาม
 // PATCH: บันทึกสถานะกิจกรรม, ราคาค่าสนาม, จำนวนคอร์ด
 app.patch("/api/admin/input-number-courts-event", async (req, res) => {
-  const { event_id, event_status, cost_stadium, number_courts, cost_shuttlecock } = req.body;
+  const {
+    event_id,
+    event_status,
+    cost_stadium,
+    number_courts,
+    cost_shuttlecock,
+  } = req.body;
 
   if (!event_id || !event_status) {
     return res.status(400).json({
