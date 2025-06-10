@@ -820,6 +820,7 @@ app.get("/api/user-group/:event_id/:user_id", async (req, res) => {
   }
 });
 
+
 // อัปเดตคำนวณ Moving Average
 app.post("/api/user/rate-round", async (req, res) => {
   const { event_id, group_id, user_id, ratings } = req.body;
