@@ -251,7 +251,7 @@ async function getPlayersForEvent(event_id) {
 }
 // สร้าง group + game detail
 async function saveMatchedGroups(event_id, groups) {
-  const conn = connection.promise(); 
+  const conn = connection.promise();
 
   if (!Array.isArray(groups)) {
     throw new Error("groups ที่ได้ไม่ใช่ array");
@@ -259,10 +259,7 @@ async function saveMatchedGroups(event_id, groups) {
 
   for (const groupObj of groups) {
     if (!groupObj || !Array.isArray(groupObj.members)) {
-      console.error(
-        "groupObj.members ไม่ใช่ array หรือ undefined:",
-        groupObj
-      );
+      console.error("groupObj.members ไม่ใช่ array หรือ undefined:", groupObj);
       continue;
     }
 
@@ -368,28 +365,44 @@ app.post("/api/generate-court-match", async (req, res) => {
       allPlayers.map((p) => p.id)
     );
 
-    const prompt = `คุณคือ AI จัดกลุ่มแบดมินตันอัจฉริยะ (Intelligent Badminton Matchmaking AI) เป้าหมายหลักของคุณคือการสร้างกลุ่มที่สมดุลและ **ส่งเสริมให้ผู้เล่นได้พบเจอคนใหม่ๆ** 
+    // 1. ดึง custom_prompt จากฐานข้อมูล
+    const [eventSettings] = await connection
+      .promise()
+      .execute("SELECT custom_prompt FROM events_admin WHERE id_event = ?", [
+        event_id,
+      ]);
+    const customPromptText = eventSettings[0]?.custom_prompt;
+
+    // 2. กำหนด Prompt พื้นฐาน (Default)
+    const defaultPrompt = `คุณคือ AI จัดกลุ่มแบดมินตันอัจฉริยะ (Intelligent Badminton Matchmaking AI) เป้าหมายหลักของคุณคือการสร้างกลุ่มที่สมดุลและ **ส่งเสริมให้ผู้เล่นได้พบเจอคนใหม่ๆ**
 - ให้ตอบกลับมาเป็น JSON array ของกลุ่มผู้เล่นเท่านั้น ห้ามมีข้อความอธิบายอื่นใดๆ
-- ห้ามขึ้นต้นด้วยข้อความ เช่น "แน่นอนครับ" หรือ "นี่คือตัวอย่าง"
-- ห้ามใช้เครื่องหมาย \`\`\` ใด ๆ ทั้งสิ้น
-- ตอบกลับเป็น JSON เท่านั้น โดยการจับคู่เงื่อนไขดังนี้
+- ยึดตามกฎการจัดกลุ่ม 4 ข้อนี้โดยเรียงตามลำดับความสำคัญจากมากไปน้อย:
 
 **กฎข้อที่ 1 (สำคัญที่สุด): สร้างความหลากหลาย (Maximize Variety)**
 - **ต้องพยายามอย่างยิ่ง** ที่จะไม่จัดให้ผู้เล่นที่เคยอยู่กลุ่มเดียวกันมาก่อน (ดูข้อมูลจาก groupHistory) กลับมาอยู่ด้วยกันอีก โดยเฉพาะผู้เล่นที่เคยอยู่ด้วยกันมาแล้วในรอบล่าสุด
-- ให้คะแนนโบนัสสูงสำหรับการจับคู่ผู้เล่นที่ไม่เคยเจอกัน เพื่อสร้างกลุ่มใหม่ๆ ที่น่าสนใจ ความชอบที่มี (1 น้อยมาก ถึง 5 ชอบมาก -> preference: 1-5, ค่า default คือ 3)
+- ให้คะแนนโบนัสสูงสำหรับการจับคู่ผู้เล่นที่ไม่เคยเจอกัน เพื่อสร้างกลุ่มใหม่ๆ ที่น่าสนใจ
 
 **กฎข้อที่ 2: ระดับฝีมือที่เหมาะสม (Appropriate Skill Level)**
 - จับคู่ผู้เล่นที่มีระดับฝีมือ (rank_play) ใกล้เคียงกันเป็นหลัก แต่ **สามารถยืดหยุ่นได้ประมาณ 1 ระดับ** เพื่อเพิ่มความเป็นไปได้ในการจับคู่ (เช่น ผู้เล่นระดับ P สามารถเล่นกับ S ได้, S สามารถเล่นกับ N ได้)
 - พยายามหลีกเลี่ยงการจับคู่ผู้เล่นที่มีระดับห่างกันเกินไป (เช่น P ไม่ควรเล่นกับ N) ความสามารถที่ใกล้เคียงกันมี (N/B, N, S, P, C/B/A) เรียงจากน้อยไปมาก N/B เก่งน้อยสุด , C/B/A เก่งที่สุด
 
 **กฎข้อที่ 3: ความชอบซึ่งกันและกัน (Mutual Preference)**
-- ใช้ข้อมูลความชอบ (sum_rate จาก preference_to) เป็นปัจจัยรอง หลังจากพิจารณากฎข้อ 1 และ 2 แล้ว
-- หากมีตัวเลือกการจัดกลุ่มที่สูสีกัน ให้เลือกกลุ่มที่สมาชิกมีแนวโน้มจะชอบเล่นด้วยกันมากกว่า (ค่า sum_rate เฉลี่ยระหว่างกันสูง)
-- ค่า sum_rate ที่เป็น default (3) หมายถึงยังไม่เคยเล่นด้วยกัน ให้ถือว่าเป็นกลาง ค่า Moving Average
+- ใช้ข้อมูลความชอบ (rating จาก preference_to) เป็นปัจจัยรอง หลังจากพิจารณากฎข้อ 1 และ 2 แล้ว
+- หากมีตัวเลือกการจัดกลุ่มที่สูสีกัน ให้เลือกกลุ่มที่สมาชิกมีแนวโน้มจะชอบเล่นด้วยกันมากกว่า (ค่า rating เฉลี่ยระหว่างกันสูง)
+- ค่า rating ที่เป็น default (3) หมายถึงยังไม่เคยเล่นด้วยกัน ให้ถือว่าเป็นกลาง
 
 **กฎข้อที่ 4: จัดกลุ่มให้ได้ 1 กลุ่ม 4 คนเท่านั้น**
-- ผลลัพธ์สุดท้ายต้องเป็นกลุ่มที่มีสมาชิก 4 คนพอดี
+- ผลลัพธ์สุดท้ายต้องเป็นกลุ่มที่มีสมาชิก 4 คนพอดี`;
 
+    // 3. เลือกว่าจะใช้ Prompt ไหน
+    const instructionPrompt =
+      customPromptText && customPromptText.trim() !== ""
+        ? customPromptText
+        : defaultPrompt;
+
+    // 4. ประกอบร่าง Prompt ตัวสุดท้ายเพื่อส่งให้ AI
+    const prompt = `${instructionPrompt}
+    
 ข้อมูลผู้เล่น:
 ${JSON.stringify(userMap, null, 2)}
 
@@ -1019,6 +1032,7 @@ app.patch("/api/admin/input-number-courts-event", async (req, res) => {
     cost_stadium,
     number_courts,
     cost_shuttlecock,
+    custom_prompt,
   } = req.body;
 
   if (!event_id || !event_status) {
@@ -1031,13 +1045,14 @@ app.patch("/api/admin/input-number-courts-event", async (req, res) => {
   try {
     const [result] = await connection.promise().execute(
       `UPDATE events_admin 
-         SET event_status = ?, cost_stadium = ?, number_courts = ?, cost_shuttlecock = ? 
+         SET event_status = ?, cost_stadium = ?, number_courts = ?, cost_shuttlecock = ?, custom_prompt = ?
          WHERE id_event = ?`,
       [
         event_status,
         cost_stadium !== undefined ? cost_stadium : null,
         number_courts !== undefined ? number_courts : null,
         cost_shuttlecock !== undefined ? cost_shuttlecock : null,
+        custom_prompt !== undefined ? custom_prompt.trim() : null,
         event_id,
       ]
     );

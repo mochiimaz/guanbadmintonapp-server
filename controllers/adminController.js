@@ -229,7 +229,7 @@ exports.getRoomStatusAndCost = async (req, res) => {
   }
 
   try {
-    const query = `SELECT event_status, cost_stadium, number_courts, cost_shuttlecock FROM events_admin WHERE id_event = ?`;
+    const query = `SELECT event_status, cost_stadium, number_courts, cost_shuttlecock, custom_prompt FROM events_admin WHERE id_event = ?`;
     const [rows] = await connection.promise().query(query, [event_id]);
 
     if (!rows || rows.length === 0) {
@@ -245,6 +245,7 @@ exports.getRoomStatusAndCost = async (req, res) => {
       cost_stadium: rows[0].cost_stadium || null,
       number_courts: rows[0].number_courts || null,
       cost_shuttlecock: rows[0].cost_shuttlecock || null,
+      custom_prompt: rows[0].custom_prompt || null,
     });
   } catch (error) {
     return res.status(500).json({
