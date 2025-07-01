@@ -358,6 +358,7 @@ app.post("/api/generate-court-match", async (req, res) => {
         id: user.id,
         name: user.name,
         rank_play: user.rank_play,
+        skill_score: getSkillScore(user.rank_play),
         preference_to: filledPrefs,
       };
     });
@@ -366,6 +367,17 @@ app.post("/api/generate-court-match", async (req, res) => {
       event_id,
       allPlayers.map((p) => p.id)
     );
+
+    function getSkillScore(rank) {
+      const ranks = {
+        "N/B": 1,
+        N: 2,
+        S: 3,
+        P: 4,
+        "C/B/A": 5, // ให้ระดับสูงสุดมีคะแนนมากที่สุด
+      };
+      return ranks[rank] || 0; // ถ้าไม่เจอ rank ที่ตรงกัน ให้ค่าเป็น 0
+    }
 
     // 1. ดึง custom_prompt จากฐานข้อมูล
     const [eventSettings] = await connection
@@ -395,8 +407,10 @@ app.post("/api/generate-court-match", async (req, res) => {
 
 **กฎข้อที่ 4: จัดกลุ่มให้ได้ 1 กลุ่ม 4 คนเท่านั้น**
 - ผลลัพธ์สุดท้ายต้องเป็นกลุ่มที่มีสมาชิก 4 คนพอดี
+
+**กฎข้อที่ 5: แบ่งทีมให้มีความสมดุลทั้งสองฝั่งด้วย**
 - หลังจากจัดกลุ่มผู้เล่นได้แล้ว ให้แบ่งสมาชิกในกลุ่มออกเป็น 2 ทีม (ทีม 1 และ ทีม 2)
-- **หลักการแบ่งทีม:** จัดทีมโดยให้ **ผลรวมระดับฝีมือของทั้งสองทีมใกล้เคียงกันที่สุด** เพื่อให้เกมการแข่งขันสมดุลและยุติธรรม (เช่น ทีมที่มี P+ กับ S ควรเจอกับทีมที่มี P กับ P)
+- **หลักการแบ่งทีม:** จัดทีมโดยให้ **ผลรวมของ 'skill_score' ของทั้งสองทีมใกล้เคียงกันที่สุด** เพื่อให้เกมการแข่งขันสมดุล
 - ผู้เล่นทุกคนในกลุ่มต้องถูกกำหนดทีมเป็น 1 หรือ 2`;
 
     // 3. เลือกว่าจะใช้ Prompt ไหน
@@ -526,12 +540,10 @@ ${JSON.stringify(groupHistory, null, 2)}
 
     for (const member of firstGroup.members) {
       if (member.team !== 1 && member.team !== 2) {
-        return res
-          .status(400)
-          .json({
-            success: false,
-            message: `AI ไม่ได้กำหนดทีมที่ถูกต้องสำหรับผู้เล่น ${member.name}`,
-          });
+        return res.status(400).json({
+          success: false,
+          message: `AI ไม่ได้กำหนดทีมที่ถูกต้องสำหรับผู้เล่น ${member.name}`,
+        });
       }
       await conn.execute(
         "INSERT INTO group_members (group_id, user_id, team_of_group) VALUES (?, ?, ?)",
@@ -874,7 +886,7 @@ app.get("/api/user-group/:event_id/:user_id", async (req, res) => {
     if (activeGroupResult.length > 0) {
       const groupId = activeGroupResult[0].group_id;
       const [membersRows] = await conn.execute(
-        `SELECT u.id AS user_id, u.sname AS name, u.rank_play, u.sex, u.images_user
+        `SELECT u.id AS user_id, u.sname AS name, u.rank_play, u.sex, u.images_user, gm.team_of_group
          FROM group_members gm
          JOIN users u ON gm.user_id = u.id
          WHERE gm.group_id = ?`,
@@ -901,7 +913,7 @@ app.get("/api/user-group/:event_id/:user_id", async (req, res) => {
     if (finishedGroupResult.length > 0) {
       const groupId = finishedGroupResult[0].group_id;
       const [membersRows] = await conn.execute(
-        `SELECT u.id AS user_id, u.sname AS name, u.rank_play, u.sex, u.images_user
+        `SELECT u.id AS user_id, u.sname AS name, u.rank_play, u.sex, u.images_user, gm.team_of_group
          FROM group_members gm
          JOIN users u ON gm.user_id = u.id
          WHERE gm.group_id = ?`,
