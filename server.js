@@ -397,38 +397,62 @@ app.post("/api/generate-court-match", async (req, res) => {
 - ผลลัพธ์สุดท้ายต้องเป็นกลุ่มที่มีสมาชิก 4 คนพอดี`;
 
     // 3. เลือกว่าจะใช้ Prompt ไหน
-    const useDefaultPrompt =
-      !customPromptText || customPromptText.trim() === "";
-    const instructionPrompt = useDefaultPrompt
-      ? defaultPrompt
-      : customPromptText;
-
-    // const instructionPrompt =
-    //   customPromptText && customPromptText.trim() !== ""
-    //     ? customPromptText
-    // : defaultPrompt;
+    const instructionPrompt =
+      customPromptText && customPromptText.trim() !== ""
+        ? customPromptText
+        : defaultPrompt;
 
     // ประกอบร่าง Prompt โดยจะใส่ "ตัวอย่างผลลัพธ์" ก็ต่อเมื่อใช้ Default Prompt เท่านั้น
-    const prompt = `${instructionPrompt}
+    // const prompt = `${instructionPrompt}
+    const dataFormatSuffix = `
     
-ข้อมูลผู้เล่น:
+    ---
+**ข้อมูลสำหรับพิจารณา:**
+
+ข้อมูลผู้เล่น (players):
 ${JSON.stringify(userMap, null, 2)}
 
-ประวัติกลุ่มเดิม:
+ประวัติกลุ่มเดิม (groupHistory):
 ${JSON.stringify(groupHistory, null, 2)}
 
-ตัวอย่างผลลัพธ์:
+---
+**รูปแบบผลลัพธ์ที่ต้องตอบกลับ (Output Format):**
+
+- **ต้องตอบกลับเป็น JSON Array เท่านั้น** ห้ามมีข้อความอื่นใดๆ นำหน้าหรือต่อท้ายเด็ดขาด
+- ใน Array ต้องมี Object แค่ 1 อันสำหรับกลุ่มที่จัดได้
+- Object ของกลุ่มต้องมี key "group" ซึ่งมีค่าเป็น 1 และ key "members" ซึ่งเป็น Array ของผู้เล่น
+- Object ของผู้เล่นแต่ละคนใน "members" ต้องมี key "id" และ "name"
+
+ตัวอย่างโครงสร้าง JSON ที่ถูกต้อง:
 [
   {
     "group": 1,
     "members": [
-      { "id": 1, "name": "..." },
-      { "id": 2, "name": "..." },
-      { "id": 3, "name": "..." },
-      { "id": 4, "name": "..." }
+      { "id": 123, "name": "ชื่อผู้เล่น" },
+      { "id": 456, "name": "ชื่อผู้เล่น" }
     ]
   }
 ]`;
+    const prompt = instructionPrompt + dataFormatSuffix;
+
+    // ข้อมูลผู้เล่น:
+    // ${JSON.stringify(userMap, null, 2)}
+
+    // ประวัติกลุ่มเดิม:
+    // ${JSON.stringify(groupHistory, null, 2)}
+
+    // ตัวอย่างผลลัพธ์:
+    // [
+    //   {
+    //     "group": 1,
+    //     "members": [
+    //       { "id": 1, "name": "..." },
+    //       { "id": 2, "name": "..." },
+    //       { "id": 3, "name": "..." },
+    //       { "id": 4, "name": "..." }
+    //     ]
+    //   }
+    // ]`;
 
     const openaiResponse = await axios.post(
       "https://api.openai.com/v1/chat/completions",
@@ -464,6 +488,8 @@ ${JSON.stringify(groupHistory, null, 2)}
 
     // กรองเฉพาะกลุ่มแรก และเช็คให้มี 4 คนจริง
     const firstGroup = matchedGroups[0];
+    const useDefaultPrompt =
+      !customPromptText || customPromptText.trim() === "";
 
     // ตรวจสอบก่อนว่า AI สร้างกลุ่มมาให้หรือไม่
     if (
