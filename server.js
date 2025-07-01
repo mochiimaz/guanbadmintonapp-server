@@ -325,10 +325,12 @@ app.post("/api/generate-court-match", async (req, res) => {
       [event_id, event_id]
     );
 
-    if (allPlayers.length < 4) {
+    // if (allPlayers.length < 4) {
+    if (allPlayers.length < 2) {
       return res.status(400).json({
         success: false,
-        message: "ต้องมีผู้เล่นอย่างน้อย 4 คนเพื่อจัดกลุ่ม",
+        // message: "ต้องมีผู้เล่นอย่างน้อย 4 คนเพื่อจัดกลุ่ม",
+        message: "ต้องมีผู้เล่นอย่างน้อย 2 คนเพื่อจัดกลุ่ม",
       });
     }
 
@@ -395,12 +397,18 @@ app.post("/api/generate-court-match", async (req, res) => {
 - ผลลัพธ์สุดท้ายต้องเป็นกลุ่มที่มีสมาชิก 4 คนพอดี`;
 
     // 3. เลือกว่าจะใช้ Prompt ไหน
-    const instructionPrompt =
-      customPromptText && customPromptText.trim() !== ""
-        ? customPromptText
-        : defaultPrompt;
+    const useDefaultPrompt =
+      !customPromptText || customPromptText.trim() === "";
+    const instructionPrompt = useDefaultPrompt
+      ? defaultPrompt
+      : customPromptText;
 
-    // 4. ประกอบร่าง Prompt ตัวสุดท้ายเพื่อส่งให้ AI
+    // const instructionPrompt =
+    //   customPromptText && customPromptText.trim() !== ""
+    //     ? customPromptText
+    // : defaultPrompt;
+
+    // ประกอบร่าง Prompt โดยจะใส่ "ตัวอย่างผลลัพธ์" ก็ต่อเมื่อใช้ Default Prompt เท่านั้น
     const prompt = `${instructionPrompt}
     
 ข้อมูลผู้เล่น:
@@ -456,14 +464,25 @@ ${JSON.stringify(groupHistory, null, 2)}
 
     // กรองเฉพาะกลุ่มแรก และเช็คให้มี 4 คนจริง
     const firstGroup = matchedGroups[0];
+
+    // ตรวจสอบก่อนว่า AI สร้างกลุ่มมาให้หรือไม่
     if (
       !firstGroup ||
       !Array.isArray(firstGroup.members) ||
-      firstGroup.members.length !== 4
+      firstGroup.members.length === 0
     ) {
       return res.status(400).json({
         success: false,
-        message: "กลุ่มที่ตอบกลับไม่มีสมาชิกครบ 4 คน",
+        message:
+          "AI ไม่สามารถจัดกลุ่มตามคำสั่งได้ หรือกลุ่มที่ตอบกลับไม่มีสมาชิก",
+      });
+    }
+
+    // ถ้าเป็น Default Prompt (ที่ไม่ได้กำหนดเอง) ให้บังคับว่าต้องมี 4 คนเหมือนเดิม
+    if (useDefaultPrompt && firstGroup.members.length !== 4) {
+      return res.status(400).json({
+        success: false,
+        message: "กลุ่มที่ตอบกลับไม่มีสมาชิกครบ 4 คนตามเงื่อนไขพื้นฐาน",
       });
     }
 
