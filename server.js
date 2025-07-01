@@ -394,7 +394,10 @@ app.post("/api/generate-court-match", async (req, res) => {
 - ค่า rating ที่เป็น default (3) หมายถึงยังไม่เคยเล่นด้วยกัน ให้ถือว่าเป็นกลาง
 
 **กฎข้อที่ 4: จัดกลุ่มให้ได้ 1 กลุ่ม 4 คนเท่านั้น**
-- ผลลัพธ์สุดท้ายต้องเป็นกลุ่มที่มีสมาชิก 4 คนพอดี`;
+- ผลลัพธ์สุดท้ายต้องเป็นกลุ่มที่มีสมาชิก 4 คนพอดี
+- หลังจากจัดกลุ่มผู้เล่นได้แล้ว ให้แบ่งสมาชิกในกลุ่มออกเป็น 2 ทีม (ทีม 1 และ ทีม 2)
+- **หลักการแบ่งทีม:** จัดทีมโดยให้ **ผลรวมระดับฝีมือของทั้งสองทีมใกล้เคียงกันที่สุด** เพื่อให้เกมการแข่งขันสมดุลและยุติธรรม (เช่น ทีมที่มี P+ กับ S ควรเจอกับทีมที่มี P กับ P)
+- ผู้เล่นทุกคนในกลุ่มต้องถูกกำหนดทีมเป็น 1 หรือ 2`;
 
     // 3. เลือกว่าจะใช้ Prompt ไหน
     const instructionPrompt =
@@ -421,15 +424,17 @@ ${JSON.stringify(groupHistory, null, 2)}
 - **ต้องตอบกลับเป็น JSON Array เท่านั้น** ห้ามมีข้อความอื่นใดๆ นำหน้าหรือต่อท้ายเด็ดขาด
 - ใน Array ต้องมี Object แค่ 1 อันสำหรับกลุ่มที่จัดได้
 - Object ของกลุ่มต้องมี key "group" ซึ่งมีค่าเป็น 1 และ key "members" ซึ่งเป็น Array ของผู้เล่น
-- Object ของผู้เล่นแต่ละคนใน "members" ต้องมี key "id" และ "name"
+- Object ของผู้เล่นแต่ละคนใน "members" ต้องมี key "id", "name", และ **"team"** ซึ่งมีค่าเป็น 1 หรือ 2
 
 ตัวอย่างโครงสร้าง JSON ที่ถูกต้อง:
 [
   {
     "group": 1,
     "members": [
-      { "id": 123, "name": "ชื่อผู้เล่น" },
-      { "id": 456, "name": "ชื่อผู้เล่น" }
+      { "id": 123, "name": "ผู้เล่น A", "team": 1 },
+      { "id": 456, "name": "ผู้เล่น B", "team": 2 },
+      { "id": 789, "name": "ผู้เล่น C", "team": 1 },
+      { "id": 101, "name": "ผู้เล่น D", "team": 2 }
     ]
   }
 ]`;
@@ -520,11 +525,25 @@ ${JSON.stringify(groupHistory, null, 2)}
     const group_id = groupResult.insertId;
 
     for (const member of firstGroup.members) {
+      if (member.team !== 1 && member.team !== 2) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+            message: `AI ไม่ได้กำหนดทีมที่ถูกต้องสำหรับผู้เล่น ${member.name}`,
+          });
+      }
       await conn.execute(
-        "INSERT INTO group_members (group_id, user_id) VALUES (?, ?)",
-        [group_id, member.id]
+        "INSERT INTO group_members (group_id, user_id, team_of_group) VALUES (?, ?, ?)",
+        [group_id, member.id, member.team]
       );
     }
+    // for (const member of firstGroup.members) {
+    //   await conn.execute(
+    //     "INSERT INTO group_members (group_id, user_id) VALUES (?, ?)",
+    //     [group_id, member.id]
+    //   );
+    // }
 
     await conn.execute(
       `INSERT INTO game_details (
@@ -630,7 +649,7 @@ app.get("/api/court-players", async (req, res) => {
     const group_id = latestGroupRows[0].group_id;
 
     const [rows] = await conn.execute(
-      `SELECT u.id, u.sname AS name, u.rank_play, u.sex, u.images_user
+      `SELECT u.id, u.sname AS name, u.rank_play, u.sex, u.images_user, gm.team_of_group
        FROM group_members gm
        JOIN users u ON gm.user_id = u.id
        WHERE gm.group_id = ?`,
@@ -695,7 +714,7 @@ ORDER BY gd.id DESC`,
     const placeholders = activeGroupIds.map(() => "?").join(", ");
     const [rows] = await connection.promise().execute(
       `SELECT gm.group_id, u.id AS user_id, u.sname AS name,
-              u.rank_play, u.sex, u.images_user
+              u.rank_play, u.sex, u.images_user, gm.team_of_group
        FROM group_matching g
        JOIN group_members gm ON g.group_id = gm.group_id
        JOIN users u ON gm.user_id = u.id
@@ -713,6 +732,7 @@ ORDER BY gd.id DESC`,
         rank_play: row.rank_play,
         sex: row.sex,
         images_user: row.images_user,
+        team_of_group: row.team_of_group,
       });
     });
 
