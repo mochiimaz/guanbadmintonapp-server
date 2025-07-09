@@ -423,6 +423,8 @@ app.post("/api/generate-court-match", async (req, res) => {
         ? customPromptText
         : defaultPrompt;
 
+    console.log("defaultPrompt:",defaultPrompt)
+    console.log("customPromptText:",customPromptText)
     // ประกอบร่าง Prompt โดยจะใส่ "ตัวอย่างผลลัพธ์" ก็ต่อเมื่อใช้ Default Prompt เท่านั้น
     // const prompt = `${instructionPrompt}
     const dataFormatSuffix = `
